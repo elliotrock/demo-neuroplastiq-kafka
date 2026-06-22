@@ -1,0 +1,70 @@
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: bookibet-dev
+  region: ap-southeast-2
+  version: "1.29"
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: cfk-controller
+        namespace: confluent
+      roleName: cfk-controller-dev
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+
+    - metadata:
+        name: kafka-broker
+        namespace: confluent
+      roleName: kafka-broker-dev
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+
+    - metadata:
+        name: connect-worker
+        namespace: confluent
+      roleName: connect-worker-dev
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+    - metadata:
+        name: schema-registry
+        namespace: confluent
+      roleName: schema-registry-dev
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+
+vpc:
+  nat:
+    gateway: Single
+
+nodeGroups:
+  - name: ng-spot
+    instanceType: m5.large
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 4
+    volumeSize: 50
+    privateNetworking: true
+    ssh:
+      allow: false
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+addons:
+  - name: kube-proxy
+    version: latest
+  - name: vpc-cni
+    version: latest
+  - name: aws-ebs-csi-driver
+    version: v1.53.0-eksbuild.1
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+    serviceAccountRoleARN: arn:aws:iam::838869291259:role/AmazonEKS_EBS_CSI_DriverRole-bookibet-dev

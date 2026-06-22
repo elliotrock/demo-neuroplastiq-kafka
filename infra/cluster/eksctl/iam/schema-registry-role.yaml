@@ -1,0 +1,17 @@
+---
+apiVersion: iam.amazonaws.com/v1alpha5
+kind: IAMServiceAccount
+metadata:
+  name: schema-registry
+  namespace: confluent
+spec:
+  awsRegion: ap-southeast-2
+  roleName: schema-registry-role
+  attachPolicy:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Action:
+          - "kms:Decrypt"
+          - "ssm:GetParameter"
+        Resource: "*"

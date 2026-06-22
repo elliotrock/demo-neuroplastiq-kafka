@@ -1,0 +1,22 @@
+{{- if .Values.schemaRegistryLoadBalancer.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: schemaregistry-internal
+  namespace: {{.Values.namespace}}
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    {{- with .Values.schemaRegistryLoadBalancer.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+  selector:
+    {{- toYaml .Values.schemaRegistryLoadBalancer.selector | nindent 4 }}
+{{- end }}

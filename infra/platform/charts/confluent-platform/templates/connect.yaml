@@ -1,0 +1,65 @@
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: Connect
+metadata:
+  name: connect
+  namespace: {{.Values.namespace}}
+spec:
+  {{- $bootstrapEndpoint := .Values.kafka.bootstrapEndpoint | default (printf "kafka.%s.svc.cluster.local:%v" .Values.namespace (.Values.kafka.bootstrapPort | default 9092)) }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  {{- range .Values.imagePullSecrets }}
+    - name: {{ . }}
+  {{- end }}
+  {{- end }}
+  replicas: {{.Values.connect.replicas}}
+  image:
+    application: confluentinc/cp-server-connect:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  {{- $values := .Values | default dict }}
+  {{- $connect := $values.connect | default dict }}
+  {{- $podTemplate := $connect.podTemplate | default dict }}
+  {{- $saName := $podTemplate.serviceAccountName | default $connect.serviceAccountName }}
+  {{- if $saName }}
+  {{- $_ := set $podTemplate "serviceAccountName" $saName }}
+  {{- end }}
+  {{- if $podTemplate }}
+  podTemplate:
+{{ toYaml $podTemplate | nindent 4 }}
+  {{- end }}
+  {{- if $connect.build }}
+  build:
+{{ toYaml $connect.build | nindent 4 }}
+  {{- end }}
+  dependencies:
+    kafka:
+      bootstrapEndpoint: {{ $bootstrapEndpoint }}
+    schemaRegistry:
+      url: http://schemaregistry.{{$.Values.namespace}}.svc.cluster.local:8081
+  {{- if .Values.connect.secretMount }}
+  mountedVolumes:
+    volumes:
+      - name: {{ .Values.connect.secretMount.name }}
+        secret:
+          secretName: {{ .Values.connect.secretMount.secretName }}
+    volumeMounts:
+      - name: {{ .Values.connect.secretMount.name }}
+        mountPath: {{ .Values.connect.secretMount.mountPath }}
+        readOnly: true
+  {{- end }}
+  configOverrides:
+    server:
+      - group.id=connect-cluster
+      - offset.storage.topic=connect-offsets
+      - offset.storage.replication.factor={{ $connect.offsetStorageReplicationFactor | default 3 }}
+      - config.storage.topic=connect-configs
+      - config.storage.replication.factor={{ $connect.configStorageReplicationFactor | default 3 }}
+      - status.storage.topic=connect-statuses
+      - status.storage.replication.factor={{ $connect.statusStorageReplicationFactor | default 3 }}
+      - key.converter=io.confluent.connect.avro.AvroConverter
+      - key.converter.schema.registry.url=http://schemaregistry.{{ $.Values.namespace }}.svc.cluster.local:8081
+      - value.converter=io.confluent.connect.avro.AvroConverter
+      - value.converter.schema.registry.url=http://schemaregistry.{{ $.Values.namespace }}.svc.cluster.local:8081
+      {{- if $connect.build }}
+      - plugin.path=/usr/share/java,/usr/share/confluent-hub-components,/opt/confluent/share/java,/mnt/plugins
+      {{- end }}

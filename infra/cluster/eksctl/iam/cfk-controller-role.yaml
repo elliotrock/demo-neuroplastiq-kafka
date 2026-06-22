@@ -1,0 +1,19 @@
+---
+apiVersion: iam.amazonaws.com/v1alpha5
+kind: IAMServiceAccount
+metadata:
+  name: cfk-controller
+  namespace: confluent
+spec:
+  awsRegion: ap-southeast-2
+  roleName: cfk-controller-role
+  attachPolicy:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Action:
+          - "ec2:DescribeInstances"
+          - "ec2:DescribeSecurityGroups"
+          - "ec2:DescribeSubnets"
+          - "iam:PassRole"
+        Resource: "*"

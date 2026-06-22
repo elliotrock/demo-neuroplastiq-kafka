@@ -1,0 +1,70 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Bookibet API Gateway (minimum public entrypoint)
+  Creates a REST API with a mock /health route.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Short environment name (dev/staging/prod)
+  ApiNamePrefix:
+    Type: String
+    Default: bookibet
+    Description: Prefix for API Gateway name
+
+Resources:
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${ApiNamePrefix}-${EnvironmentName}-api"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  HealthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: health
+
+  HealthMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref HealthResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: '{"status":"ok"}'
+      MethodResponses:
+        - StatusCode: 200
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: HealthMethod
+    Properties:
+      RestApiId: !Ref RestApi
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref EnvironmentName
+
+Outputs:
+  ApiId:
+    Description: API Gateway REST API ID
+    Value: !Ref RestApi
+  ApiInvokeUrl:
+    Description: Base URL for the API Gateway stage
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${EnvironmentName}"

@@ -1,0 +1,67 @@
+---
+namespace: confluent
+awsRegion: ap-southeast-2
+
+confluent-operator:
+  enabled: true
+
+kraftController:
+  enabled: true
+  name: kafka-controller
+  nodeId: 3000
+  replicas: 1
+  image: confluentinc/cp-server:7.6.1
+  initImage: confluentinc/confluent-init-container:2.8.3
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"
+
+global:
+  confluent:
+    license:
+      type: development
+
+kafka:
+  enabled: true
+  replicas: 1
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"
+
+schemaRegistry:
+  enabled: true
+  replicas: 1
+
+schemaRegistryLoadBalancer:
+  enabled: false
+  annotations: {}
+  selector:
+    app: schemaregistry
+
+connect:
+  enabled: true
+  replicas: 1
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"
+  serviceAccountName: connect-worker
+  secretMount:
+    name: snowflake-key
+    secretName: snowflake-private-key
+    mountPath: /etc/secrets/snowflake
+
+connectPlugins: []
+
+kafkaRestProxy:
+  enabled: false
+  replicas: 1
+  # Optional serializer subject strategies:
+  # configOverrides:
+  #   server:
+  #     - value.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+  #     - key.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+  #     - producer.value.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+  #     - producer.key.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+
+kafkaRestProxyLoadBalancer:
+  enabled: false
+  annotations: {}
+  selector:
+    app: kafka-rest

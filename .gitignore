@@ -1,0 +1,58 @@
+# Local/private notes
+bookibet-docs/private/
+.codex
+.codex/
+
+# Local test artifacts
+bm-test-stub.sh
+postman-collection.json
+context_kong_debugging.txt
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Connector artifacts (binaries)
+confluent/connectors/*/*
+!confluent/connectors/*/README.md
+!confluent/connectors/*/plugins/
+confluent/connectors/*/plugins/**
+!confluent/connectors/*/plugins/.gitkeep
+
+# Windows ADS metadata sidecar files
+create BOOKIBET_PROD.MAT transactions views_2026-03-12-1107 (1).csv:Zone.Identifier
+create BOOKIBET_PROD.MAT transactions views_2026-03-12-1107.csv:Zone.Identifier
+create BOOKIBET_PROD.MAT transactions views_2026-03-12-1110_detailed.csv:Zone.Identifier
+list_TRANSACTIONS_ENRICHED_2026-03-12-0953.csv:Zone.Identifier
+
+# Neuroplastiq demo hygiene
+.env
+.env.*
+!.env.example
+*.log
+logs/
+tmp/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+coverage/
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+*.tgz
+*.zip
+*:Zone.Identifier
+costs_*.csv
+.DS_Store
+
+# Accidental shell argument files
+infra/cloudformation/--*

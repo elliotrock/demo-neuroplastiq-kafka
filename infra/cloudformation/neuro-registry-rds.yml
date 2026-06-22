@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Neuro Registry Postgres (staging)
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: staging
+  VpcId:
+    Type: String
+    Description: VPC id for the Bookibet environment
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Description: Private subnet ids (comma separated)
+  DbUsername:
+    Type: String
+    Default: neuro_registry
+    NoEcho: true
+  DbPassword:
+    Type: String
+    NoEcho: true
+  DbName:
+    Type: String
+    Default: neuro_registry
+
+Resources:
+  NeuroRegistryDbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Neuro Registry Postgres access
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.0.0.0/16
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "bookibet-${EnvironmentName}-neuro-registry-sg"
+
+  NeuroRegistryDbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Neuro Registry DB subnets
+      SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub "bookibet-${EnvironmentName}-neuro-registry-subnets"
+
+  NeuroRegistryDb:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "bookibet-${EnvironmentName}-neuro-registry"
+      Engine: postgres
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: 20
+      StorageType: gp3
+      MultiAZ: false
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+      DBName: !Ref DbName
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      VPCSecurityGroups:
+        - !Ref NeuroRegistryDbSecurityGroup
+      DBSubnetGroupName: !Ref NeuroRegistryDbSubnetGroup
+
+Outputs:
+  NeuroRegistryDbEndpoint:
+    Description: Neuro Registry DB endpoint
+    Value: !GetAtt NeuroRegistryDb.Endpoint.Address
+  NeuroRegistryDbPort:
+    Description: Neuro Registry DB port
+    Value: !GetAtt NeuroRegistryDb.Endpoint.Port
+  NeuroRegistryDbName:
+    Description: Neuro Registry DB name
+    Value: !Ref DbName

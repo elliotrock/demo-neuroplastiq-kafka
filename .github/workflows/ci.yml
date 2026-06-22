@@ -1,0 +1,27 @@
+---
+name: CI
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm Charts
+        run: |
+          helm lint infra/platform/charts/confluent-platform
+
+      - name: Validate YAML syntax
+        run: |
+          yamllint -c .yamllint .

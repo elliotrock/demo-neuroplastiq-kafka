@@ -1,0 +1,12 @@
+---
+apiVersion: v2
+name: confluent-platform
+description: Minimal Confluent Platform (KRaft) using CFK on EKS
+type: application
+version: 0.1.0
+appVersion: "7.6.1"
+dependencies:
+  - name: confluent-for-kubernetes
+    # CFK chart versions are numeric build ids; 0.1145.102 corresponds to app version 2.10.4
+    version: "0.1145.102"
+    repository: "https://packages.confluent.io/helm"

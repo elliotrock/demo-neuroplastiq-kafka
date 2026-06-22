@@ -1,0 +1,12 @@
+{
+    "yaml.schemas": {
+      "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
+        "infra/cloudformation/*.yml",
+        "infra/cloudformation/*.yaml"
+      ]
+    },
+    "editor.fontSize": 18,
+    "editor.wordWrap": "on",
+    "makefile.configureOnOpen": true,
+    "docker.extension.enableComposeLanguageServer": false
+  }

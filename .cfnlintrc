@@ -1,0 +1,22 @@
+template-paths:
+  - infra/cloudformation/
+
+regions:
+  - ap-southeast-2
+  - us-east-1
+
+ignore-checks:
+  - W3002        # Allows use of !Sub and intrinsic functions without false warnings
+  - W2001        # Skip warnings about overly permissive IAM (during bootstrap)
+  - W4001        # Skip warnings about deprecated resource formats, if any appear
+
+include-checks:
+  - E            # All errors
+  - W            # All warnings
+  - I            # Info
+
+# Optional: Parameter consistency rules
+strict-parameters: false
+
+# Optional: Require Description fields in all resources
+require-description: false

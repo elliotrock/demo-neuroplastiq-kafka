@@ -1,0 +1,112 @@
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: ConfluentPlatform
+metadata:
+  name: cp
+  namespace: confluent
+spec:
+  version: 7.6.1
+  license:
+    type: development
+  dataPlane:
+    loadBalancer:
+      enabled: false
+    ingress:
+      enabled: false
+
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: Kafka
+metadata:
+  name: kafka
+  namespace: confluent
+spec:
+  controller:
+    clusterRef:
+      name: kafka-controller
+  replicas: 1
+  image:
+    application: confluentinc/cp-server:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  configOverrides:
+    server:
+      - process.roles=broker
+      - node.id=2
+      - broker.id=2
+      - controller.quorum.voters=1@kafka-controller-0.kafka-controller.confluent.svc.cluster.local:9074
+      - listeners=PLAINTEXT://0.0.0.0:9092,REPLICATION://0.0.0.0:9071
+      - advertised.listeners=PLAINTEXT://kafka.confluent.svc.cluster.local:9092,REPLICATION://kafka.confluent.svc.cluster.local:9071
+      - listener.security.protocol.map=PLAINTEXT:PLAINTEXT,REPLICATION:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - inter.broker.listener.name=REPLICATION
+  dataVolumeCapacity: 5Gi
+  storageClass:
+    name: standard
+
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: KRaftController
+metadata:
+  name: kafka-controller
+  namespace: confluent
+spec:
+  replicas: 1
+  image:
+    application: confluentinc/cp-server:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  dataVolumeCapacity: 5Gi
+  storageClass:
+    name: standard
+  configOverrides:
+    server:
+      - process.roles=controller
+      - node.id=1
+      - broker.id=1
+      - controller.quorum.voters=1@kafka-controller-0.kafka-controller.confluent.svc.cluster.local:9074
+      - controller.listener.names=CONTROLLER
+      - listeners=CONTROLLER://0.0.0.0:9074
+      - advertised.listeners=CONTROLLER://kafka-controller.confluent.svc.cluster.local:9074
+
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: SchemaRegistry
+metadata:
+  name: schemaregistry
+  namespace: confluent
+spec:
+  replicas: 1
+  image:
+    application: confluentinc/cp-schema-registry:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  dependencies:
+    kafka:
+      bootstrapEndpoint: kafka.confluent.svc.cluster.local:9092
+
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: Connect
+metadata:
+  name: connect
+  namespace: confluent
+spec:
+  replicas: 1
+  image:
+    application: confluentinc/cp-server-connect:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  dependencies:
+    kafka:
+      bootstrapEndpoint: kafka.confluent.svc.cluster.local:9092
+    schemaRegistry:
+      url: http://schemaregistry.confluent.svc.cluster.local:8081
+  configOverrides:
+    server:
+      - group.id=connect-cluster
+      - offset.storage.topic=connect-offsets
+      - offset.storage.replication.factor=1
+      - config.storage.topic=connect-configs
+      - config.storage.replication.factor=1
+      - status.storage.topic=connect-statuses
+      - status.storage.replication.factor=1
+      - key.converter=io.confluent.connect.avro.AvroConverter
+      - key.converter.schema.registry.url=http://schemaregistry.confluent.svc.cluster.local:8081
+      - value.converter=io.confluent.connect.avro.AvroConverter
+      - value.converter.schema.registry.url=http://schemaregistry.confluent.svc.cluster.local:8081

@@ -1,0 +1,30 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: kafka-rest
+    protocol: http
+    host: kafka-rest.confluent.svc.cluster.local
+    port: 8082
+    routes:
+      - name: data-route
+        expression: 'http.path ~ "^/v3(/|$)"'
+        strip_path: false
+
+  - name: neuroplastiq
+    url: http://neuroplastiq-api.default.svc.cluster.local:8000
+    routes:
+      - name: np-route
+        expression: 'http.path ~ "^/npf(/|$)"'
+        strip_path: true
+
+plugins:
+  - name: key-auth
+    service: kafka-rest
+  - name: basic-auth
+    service: neuroplastiq
+
+consumers:
+  - username: kafka-rest-client
+    keyauth_credentials:
+      - key: bookibet-dev-key

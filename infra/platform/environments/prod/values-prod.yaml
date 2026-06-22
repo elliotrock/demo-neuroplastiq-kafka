@@ -1,0 +1,27 @@
+---
+namespace: confluent
+
+kraftController:
+  nodeId: 3000
+
+kafka:
+  replicas: 3
+  oneReplicaPerNode: true
+  config:
+    default.replication.factor: 3
+    min.insync.replicas: 2
+    offsets.topic.replication.factor: 3
+    transaction.state.log.replication.factor: 3
+    transaction.state.log.min.isr: 2
+    confluent.license.topic.replication.factor: 3
+    confluent.metadata.topic.replication.factor: 3
+    confluent.metrics.reporter.topic.replicas: 3
+
+connect:
+  replicas: 3
+  offsetStorageReplicationFactor: 3
+  configStorageReplicationFactor: 3
+  statusStorageReplicationFactor: 3
+
+schemaregistry:
+  replicas: 3

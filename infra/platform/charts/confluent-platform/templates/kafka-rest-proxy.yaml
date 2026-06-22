@@ -1,0 +1,34 @@
+{{- if .Values.kafkaRestProxy.enabled }}
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: KafkaRestProxy
+metadata:
+  name: kafka-rest
+  namespace: {{.Values.namespace}}
+spec:
+  {{- $bootstrapEndpoint := .Values.kafka.bootstrapEndpoint | default (printf "kafka.%s.svc.cluster.local:%v" .Values.namespace (.Values.kafka.bootstrapPort | default 9092)) }}
+  {{- $kafkaRestProxy := .Values.kafkaRestProxy | default dict }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  {{- range .Values.imagePullSecrets }}
+    - name: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.kafkaRestProxy.podTemplate }}
+  podTemplate:
+{{ toYaml .Values.kafkaRestProxy.podTemplate | nindent 4 }}
+  {{- end }}
+  replicas: {{.Values.kafkaRestProxy.replicas}}
+  image:
+    application: confluentinc/cp-kafka-rest:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  dependencies:
+    kafka:
+      bootstrapEndpoint: {{ $bootstrapEndpoint }}
+    schemaRegistry:
+      url: http://schemaregistry.{{.Values.namespace}}.svc.cluster.local:8081
+  {{- if $kafkaRestProxy.configOverrides }}
+  configOverrides:
+{{ toYaml $kafkaRestProxy.configOverrides | nindent 4 }}
+  {{- end }}
+{{- end }}

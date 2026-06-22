@@ -1,0 +1,19 @@
+env:
+  database: "off"
+  # Keep declarative config path aligned with Helm dblessConfig mount.
+  declarative_config: /kong_dbless/kong.yaml
+  admin_listen: "127.0.0.1:8001"
+  router_flavor: "expressions"
+
+dblessConfig:
+  configMap: kong-config
+  configFile: kong.yaml
+
+proxy:
+  type: ClusterIP
+
+ingressController:
+  enabled: false
+
+admin:
+  enabled: false

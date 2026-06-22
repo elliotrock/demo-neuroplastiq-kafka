@@ -1,0 +1,9 @@
+snowflake_account              = "xy12345.ap-southeast-2"
+snowflake_username             = "tf_admin"
+snowflake_private_key          = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+warehouse_size                 = "XSMALL"
+warehouse_auto_suspend_seconds = 60
+
+enable_storage_integration     = false
+storage_aws_role_arn           = "arn:aws:iam::123456789012:role/bookibet-snowpipe"
+storage_allowed_locations      = ["s3://bookibet-dev-snowpipe/ingest/"]

@@ -1,0 +1,53 @@
+---
+global:
+  name: bookibet-dev
+  replicas: 1
+  storageClass: gp2-ebs
+
+kraftController:
+  enabled: true
+  name: kafka-controller
+  nodeId: 3000
+  replicas: 1
+  image: confluentinc/cp-server:7.6.1
+  initImage: confluentinc/confluent-init-container:2.8.3
+  storageClass: gp2-ebs
+  storageSize: 10Gi
+
+kafka:
+  replicas: 1
+  storageSize: 20Gi
+  config:
+    num.partitions: 3
+    default.replication.factor: 1
+    min.insync.replicas: 1
+  storage:
+    size: 20Gi
+
+schemaregistry:
+  replicas: 1
+
+schemaRegistryLoadBalancer:
+  enabled: true
+  annotations: {}
+  selector:
+    app: schemaregistry
+
+connect:
+  replicas: 1
+  configOverrides:
+    consumer:
+      auto.offset.reset: earliest
+  storage:
+    size: 10Gi
+  env:
+    SNOWFLAKE_USERNAME: ${SNOWFLAKE_USERNAME}
+    SNOWFLAKE_PRIVATE_KEY: ${SNOWFLAKE_PRIVATE_KEY}
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi

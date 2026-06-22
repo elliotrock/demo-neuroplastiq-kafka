@@ -1,0 +1,19 @@
+---
+apiVersion: iam.amazonaws.com/v1alpha5
+kind: IAMServiceAccount
+metadata:
+  name: connect-worker
+  namespace: confluent
+spec:
+  awsRegion: ap-southeast-2
+  roleName: connect-worker-role
+  attachPolicy:
+    Version: "2012-10-17"
+    Statement:
+      - Effect: Allow
+        Action:
+          - "s3:*"
+          - "kms:Decrypt"
+          - "kms:Encrypt"
+        Resource: "*"
+# Optional: we can tighten this later per-client.

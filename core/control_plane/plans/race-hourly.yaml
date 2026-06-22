@@ -1,0 +1,31 @@
+plan_name: race-hourly
+enabled: true
+
+schedule:
+  active_period:
+    mode: rolling
+    lookback: 24h
+  frequency_period: 1h
+
+runtime:
+  source_mode: db
+  worker_url_template: "http://neuroplastiq-graphql-worker-{worker_id}.neuroplastiq.svc.cluster.local:8000"
+
+steps:
+  - name: seed-race-stream
+    action: seed_runtime_config
+    config_name: race-stream
+    config_file: /configs/graphql-source-race-stream.yaml
+
+  - name: refresh-race-workers
+    action: refresh_workers
+    config_name: race-stream
+    workers: [0, 1, 2]
+    depends_on: [seed-race-stream]
+
+  - name: trigger-race-workers
+    action: trigger_workers
+    config_name: race-stream
+    job_prefix: race-stream
+    workers: [0, 1, 2]
+    depends_on: [refresh-race-workers]

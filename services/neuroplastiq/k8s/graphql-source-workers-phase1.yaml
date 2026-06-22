@@ -1,0 +1,249 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neuroplastiq-graphql-worker-0
+  namespace: neuroplastiq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neuroplastiq-graphql-worker
+      shard: "0"
+  template:
+    metadata:
+      labels:
+        app: neuroplastiq-graphql-worker
+        shard: "0"
+    spec:
+      containers:
+        - name: neuroplastiq
+          image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SCHEMA_REGISTRY_URL
+              value: "http://schemaregistry.confluent.svc.cluster.local:8081"
+            - name: DOMAIN
+              value: "npf"
+            - name: LOG_LEVEL
+              value: "info"
+            # Phase 1 shard identity (read by graphql-source connector once implemented)
+            - name: WORKER_COUNT
+              value: "3"
+            - name: WORKER_ID
+              value: "0"
+            - name: SHARDING_MODE
+              value: "hash_mod"
+          envFrom:
+            - secretRef:
+                name: neuroplastiq-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neuroplastiq-graphql-worker-0
+  namespace: neuroplastiq
+spec:
+  selector:
+    app: neuroplastiq-graphql-worker
+    shard: "0"
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neuroplastiq-graphql-worker-1
+  namespace: neuroplastiq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neuroplastiq-graphql-worker
+      shard: "1"
+  template:
+    metadata:
+      labels:
+        app: neuroplastiq-graphql-worker
+        shard: "1"
+    spec:
+      containers:
+        - name: neuroplastiq
+          image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SCHEMA_REGISTRY_URL
+              value: "http://schemaregistry.confluent.svc.cluster.local:8081"
+            - name: DOMAIN
+              value: "npf"
+            - name: LOG_LEVEL
+              value: "info"
+            # Phase 1 shard identity (read by graphql-source connector once implemented)
+            - name: WORKER_COUNT
+              value: "3"
+            - name: WORKER_ID
+              value: "1"
+            - name: SHARDING_MODE
+              value: "hash_mod"
+          envFrom:
+            - secretRef:
+                name: neuroplastiq-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neuroplastiq-graphql-worker-1
+  namespace: neuroplastiq
+spec:
+  selector:
+    app: neuroplastiq-graphql-worker
+    shard: "1"
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neuroplastiq-graphql-worker-2
+  namespace: neuroplastiq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neuroplastiq-graphql-worker
+      shard: "2"
+  template:
+    metadata:
+      labels:
+        app: neuroplastiq-graphql-worker
+        shard: "2"
+    spec:
+      containers:
+        - name: neuroplastiq
+          image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SCHEMA_REGISTRY_URL
+              value: "http://schemaregistry.confluent.svc.cluster.local:8081"
+            - name: DOMAIN
+              value: "npf"
+            - name: LOG_LEVEL
+              value: "info"
+            # Phase 1 shard identity (read by graphql-source connector once implemented)
+            - name: WORKER_COUNT
+              value: "3"
+            - name: WORKER_ID
+              value: "2"
+            - name: SHARDING_MODE
+              value: "hash_mod"
+          envFrom:
+            - secretRef:
+                name: neuroplastiq-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neuroplastiq-graphql-worker-2
+  namespace: neuroplastiq
+spec:
+  selector:
+    app: neuroplastiq-graphql-worker
+    shard: "2"
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: neuroplastiq-graphql-worker-0-trigger
+  namespace: neuroplastiq
+spec:
+  # Every minute; tune to control pressure/throughput
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.11.1
+              args:
+                - -sS
+                - -X
+                - POST
+                - --max-time
+                - "900"
+                - http://neuroplastiq-graphql-worker-0.neuroplastiq.svc.cluster.local:8000/connector
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: neuroplastiq-graphql-worker-1-trigger
+  namespace: neuroplastiq
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.11.1
+              args:
+                - -sS
+                - -X
+                - POST
+                - --max-time
+                - "900"
+                - http://neuroplastiq-graphql-worker-1.neuroplastiq.svc.cluster.local:8000/connector
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: neuroplastiq-graphql-worker-2-trigger
+  namespace: neuroplastiq
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.11.1
+              args:
+                - -sS
+                - -X
+                - POST
+                - --max-time
+                - "900"
+                - http://neuroplastiq-graphql-worker-2.neuroplastiq.svc.cluster.local:8000/connector

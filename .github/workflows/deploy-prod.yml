@@ -1,0 +1,557 @@
+---
+name: Deploy Prod
+
+'on':
+  push:
+    branches:
+      - release/*
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-southeast-2
+  CLUSTER_NAME: bookibet-prod
+  PROD_NODEGROUP_NAME: ng-spot
+  PROD_NODEGROUP_MIN_SIZE: "3"
+  PROD_NODEGROUP_DESIRED_SIZE: "3"
+  PROD_NODEGROUP_MAX_SIZE: "6"
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      url: https://platform.booki/
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{secrets.AWS_ROLE_ARN}}
+          aws-region: ${{env.AWS_REGION}}
+
+      - name: Deploy network stack (VPC/NAT/endpoints)
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name bookibet-prod-network \
+            --template-file infra/cloudformation/main.yml \
+            --parameter-overrides EnvironmentName=prod EnableNat=true EnableVpcEndpoints=true \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region "$AWS_REGION"
+
+      - name: Deploy API Gateway stack
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name bookibet-prod-api-gateway \
+            --template-file infra/cloudformation/api-gateway.yml \
+            --parameter-overrides EnvironmentName=prod ApiNamePrefix=bookibet \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region "$AWS_REGION"
+
+      - name: Publish connector plugins to S3
+        run: |
+          set -euo pipefail
+          CONNECTOR_BUCKET="$(aws cloudformation describe-stacks \
+            --stack-name bookibet-prod-network \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='ConnectorBucketName'].OutputValue" \
+            --output text)"
+          if [[ -z "$CONNECTOR_BUCKET" || "$CONNECTOR_BUCKET" == "None" ]]; then
+            echo "Connector bucket output not found."
+            exit 1
+          fi
+          mkdir -p confluent/connectors
+          echo "[info] syncing connector ZIP artifacts from s3://${CONNECTOR_BUCKET}/connectors/ ..."
+          aws s3 sync "s3://${CONNECTOR_BUCKET}/connectors/" confluent/connectors/ \
+            --region "$AWS_REGION" \
+            --exclude "*" \
+            --include "*.zip"
+          if ! find confluent/connectors -type f -name "*.zip" | grep -q .; then
+            echo "[error] no connector ZIP artifacts found after S3 sync."
+            echo "[info] listing s3://${CONNECTOR_BUCKET}/connectors/:"
+            aws s3 ls "s3://${CONNECTOR_BUCKET}/connectors/" --recursive --region "$AWS_REGION" || true
+            exit 1
+          fi
+          infra/platform/scripts/publish-connectors-s3.sh "$CONNECTOR_BUCKET" "$AWS_REGION"
+          infra/platform/scripts/generate-connectors-values.sh "$CONNECTOR_BUCKET" "$AWS_REGION" /tmp/connectors-values.yaml
+          if ! grep -q "archivePath:" /tmp/connectors-values.yaml; then
+            echo "[error] connectors-values.yaml has no plugin archives; refusing to continue."
+            cat /tmp/connectors-values.yaml
+            exit 1
+          fi
+
+      - name: Prepare eksctl config (use network VPC)
+        run: |
+          set -euo pipefail
+          STACK_NAME="bookibet-prod-network"
+          VPC_ID="$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='VpcId'].OutputValue" \
+            --output text)"
+          PRIVATE_SUBNET_IDS="$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnetIds'].OutputValue" \
+            --output text)"
+          PUBLIC_SUBNET_IDS="$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicSubnetIds'].OutputValue" \
+            --output text)"
+
+          if [ -z "$VPC_ID" ] || [ -z "$PRIVATE_SUBNET_IDS" ] || [ -z "$PUBLIC_SUBNET_IDS" ]; then
+            echo "[error] missing VPC outputs from stack $STACK_NAME"
+            exit 1
+          fi
+
+          IFS=',' read -r -a PRIVATE_IDS <<< "$PRIVATE_SUBNET_IDS"
+          IFS=',' read -r -a PUBLIC_IDS <<< "$PUBLIC_SUBNET_IDS"
+
+          PRIVATE_AZS=()
+          for subnet_id in "${PRIVATE_IDS[@]}"; do
+            az="$(aws ec2 describe-subnets --subnet-ids "$subnet_id" --region "$AWS_REGION" --query 'Subnets[0].AvailabilityZone' --output text)"
+            PRIVATE_AZS+=("$az")
+          done
+
+          PUBLIC_AZS=()
+          for subnet_id in "${PUBLIC_IDS[@]}"; do
+            az="$(aws ec2 describe-subnets --subnet-ids "$subnet_id" --region "$AWS_REGION" --query 'Subnets[0].AvailabilityZone' --output text)"
+            PUBLIC_AZS+=("$az")
+          done
+
+          PRIVATE_SUBNET_AZS="$(IFS=','; echo "${PRIVATE_AZS[*]}")"
+          PUBLIC_SUBNET_AZS="$(IFS=','; echo "${PUBLIC_AZS[*]}")"
+
+          export VPC_ID PRIVATE_SUBNET_IDS PUBLIC_SUBNET_IDS PRIVATE_SUBNET_AZS PUBLIC_SUBNET_AZS
+          CLUSTER_CONFIG_PATH="/tmp/cluster-prod-vpc.yaml"
+          export CLUSTER_CONFIG_PATH
+
+          python - <<'PY'
+          import os
+
+          src = "infra/cluster/eksctl/cluster-prod.yaml"
+          dest = os.environ["CLUSTER_CONFIG_PATH"]
+
+          vpc_id = os.environ["VPC_ID"]
+          private_ids = os.environ["PRIVATE_SUBNET_IDS"].split(",")
+          public_ids = os.environ["PUBLIC_SUBNET_IDS"].split(",")
+          private_azs = os.environ["PRIVATE_SUBNET_AZS"].split(",")
+          public_azs = os.environ["PUBLIC_SUBNET_AZS"].split(",")
+
+          block = [
+              "vpc:",
+              f"  id: {vpc_id}",
+              "  subnets:",
+              "    private:",
+          ]
+          for az, subnet_id in zip(private_azs, private_ids):
+              block.append(f"      {az}:")
+              block.append(f"        id: {subnet_id}")
+
+          block.append("    public:")
+          for az, subnet_id in zip(public_azs, public_ids):
+              block.append(f"      {az}:")
+              block.append(f"        id: {subnet_id}")
+
+          block.extend([
+              "  nat:",
+              "    gateway: Single",
+              "",
+          ])
+
+          with open(src, "r", encoding="utf-8") as f:
+              lines = f.read().splitlines()
+
+          out = []
+          i = 0
+          replaced = False
+          while i < len(lines):
+              line = lines[i]
+              if line.startswith("vpc:"):
+                  out.extend(block)
+                  replaced = True
+                  i += 1
+                  while i < len(lines):
+                      next_line = lines[i]
+                      if next_line == "" or next_line.startswith(" ") or next_line.startswith("\t"):
+                          i += 1
+                          continue
+                      break
+                  continue
+              out.append(line)
+              i += 1
+
+          if not replaced:
+              out.append("")
+              out.extend(block)
+
+          with open(dest, "w", encoding="utf-8") as f:
+              f.write("\n".join(out) + "\n")
+          PY
+
+          echo "CLUSTER_CONFIG=$CLUSTER_CONFIG_PATH" >> "$GITHUB_ENV"
+
+      - name: Install eksctl
+        run: |
+          curl -sSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin/eksctl
+          eksctl version
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Create EKS Cluster if not exists
+        run: |
+          set -euo pipefail
+          CLUSTER_CONFIG="${CLUSTER_CONFIG:-infra/cluster/eksctl/cluster-prod.yaml}"
+          STACK_NAME="eksctl-${CLUSTER_NAME}-cluster"
+          STACK_STATUS="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          if eksctl get cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Cluster $CLUSTER_NAME already exists; skipping creation."
+          elif [ -n "$STACK_STATUS" ]; then
+            echo "CloudFormation stack $STACK_NAME exists with status: $STACK_STATUS. Deleting to recreate."
+            case "$STACK_STATUS" in
+              *IN_PROGRESS*)
+                echo "Stack is still in progress. Re-run this workflow after it completes."
+                exit 1
+                ;;
+              *)
+                echo "Disabling termination protection on $STACK_NAME (if enabled)..."
+                aws cloudformation update-termination-protection --stack-name "$STACK_NAME" --region "$AWS_REGION" --no-enable-termination-protection || true
+                aws cloudformation delete-stack --stack-name "$STACK_NAME" --region "$AWS_REGION" || true
+                if ! aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" --region "$AWS_REGION"; then
+                  echo "Delete failed for $STACK_NAME. Recent stack events:"
+                  aws cloudformation describe-stack-events --stack-name "$STACK_NAME" --region "$AWS_REGION" --max-items 25 || true
+                  exit 1
+                fi
+                ;;
+            esac
+          fi
+          if ! eksctl get cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            eksctl create cluster -f "$CLUSTER_CONFIG"
+          fi
+
+      - name: Ensure prod nodegroup exists
+        run: |
+          set -euo pipefail
+          CLUSTER_CONFIG="${CLUSTER_CONFIG:-infra/cluster/eksctl/cluster-prod.yaml}"
+          NODEGROUP_NAME="${PROD_NODEGROUP_NAME}"
+          NODEGROUP_STACK="eksctl-${CLUSTER_NAME}-nodegroup-${NODEGROUP_NAME}"
+          NODEGROUP_STATUS="$(aws cloudformation describe-stacks --stack-name "$NODEGROUP_STACK" --region "$AWS_REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          echo "[info] nodegroup stack: $NODEGROUP_STACK status: ${NODEGROUP_STATUS:-none}"
+
+          delete_stack_if_failed() {
+            local name="$1"
+            local status="$2"
+            case "$status" in
+              *FAILED|*ROLLBACK*)
+                echo "[info] deleting failed stack $name (status $status)"
+                aws cloudformation update-termination-protection \
+                  --stack-name "$name" \
+                  --region "$AWS_REGION" \
+                  --no-enable-termination-protection || true
+                aws cloudformation delete-stack --stack-name "$name" --region "$AWS_REGION" || true
+                if ! aws cloudformation wait stack-delete-complete --stack-name "$name" --region "$AWS_REGION"; then
+                  echo "[warn] delete failed for $name. Recent stack events:"
+                  aws cloudformation describe-stack-events \
+                    --stack-name "$name" \
+                    --region "$AWS_REGION" \
+                    --max-items 25 \
+                    --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Type:ResourceType,LogicalId:LogicalResourceId,Reason:ResourceStatusReason}' \
+                    --output table || true
+                  exit 1
+                fi
+                ;;
+            esac
+          }
+
+          delete_stack_if_failed "$NODEGROUP_STACK" "$NODEGROUP_STATUS"
+
+          if ! eksctl get nodegroup --cluster "$CLUSTER_NAME" --name "$NODEGROUP_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "[info] nodegroup ${NODEGROUP_NAME} not found; creating from cluster-prod.yaml..."
+            set +e
+            eksctl create nodegroup -f "$CLUSTER_CONFIG"
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "[error] nodegroup creation failed (exit $rc); recent CloudFormation events:"
+              aws cloudformation describe-stack-events \
+                --stack-name "$NODEGROUP_STACK" \
+                --region "$AWS_REGION" \
+                --max-items 25 \
+                --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Type:ResourceType,LogicalId:LogicalResourceId,Reason:ResourceStatusReason}' \
+                --output table || true
+              echo "[info] stack description (if present):"
+              aws cloudformation describe-stacks \
+                --stack-name "$NODEGROUP_STACK" \
+                --region "$AWS_REGION" \
+                --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason,LastUpdated:LastUpdatedTime}' \
+                --output json || true
+              exit "$rc"
+            fi
+          else
+            echo "[info] nodegroup ${NODEGROUP_NAME} already present; skipping creation."
+          fi
+
+      - name: Reconcile prod nodegroup scaling
+        run: |
+          set -euo pipefail
+          NODEGROUP_NAME="${PROD_NODEGROUP_NAME}"
+          TARGET_MIN="${PROD_NODEGROUP_MIN_SIZE}"
+          TARGET_DESIRED="${PROD_NODEGROUP_DESIRED_SIZE}"
+          TARGET_MAX="${PROD_NODEGROUP_MAX_SIZE}"
+
+          if ! aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name "$NODEGROUP_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "[error] nodegroup ${NODEGROUP_NAME} not found on cluster ${CLUSTER_NAME}"
+            aws eks list-nodegroups --cluster-name "$CLUSTER_NAME" --region "$AWS_REGION"
+            exit 1
+          fi
+
+          current="$(aws eks describe-nodegroup \
+            --cluster-name "$CLUSTER_NAME" \
+            --nodegroup-name "$NODEGROUP_NAME" \
+            --region "$AWS_REGION" \
+            --query 'nodegroup.scalingConfig.[minSize,desiredSize,maxSize]' \
+            --output text)"
+          read -r CUR_MIN CUR_DESIRED CUR_MAX <<< "$current"
+          echo "[info] current scaling for ${NODEGROUP_NAME}: min=${CUR_MIN} desired=${CUR_DESIRED} max=${CUR_MAX}"
+          echo "[info] target scaling for ${NODEGROUP_NAME}: min=${TARGET_MIN} desired=${TARGET_DESIRED} max=${TARGET_MAX}"
+
+          if [[ "$CUR_MIN" != "$TARGET_MIN" || "$CUR_DESIRED" != "$TARGET_DESIRED" || "$CUR_MAX" != "$TARGET_MAX" ]]; then
+            UPDATE_ID="$(aws eks update-nodegroup-config \
+              --cluster-name "$CLUSTER_NAME" \
+              --nodegroup-name "$NODEGROUP_NAME" \
+              --region "$AWS_REGION" \
+              --scaling-config "minSize=${TARGET_MIN},desiredSize=${TARGET_DESIRED},maxSize=${TARGET_MAX}" \
+              --query 'update.id' \
+              --output text)"
+            echo "[info] started nodegroup update id=${UPDATE_ID}"
+            while true; do
+              STATUS="$(aws eks describe-update \
+                --name "$CLUSTER_NAME" \
+                --nodegroup-name "$NODEGROUP_NAME" \
+                --update-id "$UPDATE_ID" \
+                --region "$AWS_REGION" \
+                --query 'update.status' \
+                --output text)"
+              echo "[info] nodegroup update status=${STATUS}"
+              if [[ "$STATUS" == "Successful" ]]; then
+                break
+              fi
+              if [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" ]]; then
+                echo "[error] nodegroup update failed"
+                aws eks describe-update \
+                  --name "$CLUSTER_NAME" \
+                  --nodegroup-name "$NODEGROUP_NAME" \
+                  --update-id "$UPDATE_ID" \
+                  --region "$AWS_REGION"
+                exit 1
+              fi
+              sleep 20
+            done
+          else
+            echo "[info] nodegroup scaling already matches target."
+          fi
+
+      - name: Configure kubeconfig
+        run: |
+          set -euo pipefail
+          aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Gate on node readiness before CSI bootstrap
+        run: |
+          set -euo pipefail
+          NODEGROUP_NAME="${PROD_NODEGROUP_NAME}"
+          expected_ready="${PROD_NODEGROUP_DESIRED_SIZE}"
+          deadline=$((SECONDS + 900))
+          attempt=0
+
+          print_debug_snapshot() {
+            echo "[debug] --- node snapshot ---"
+            kubectl get nodes -o wide || true
+            kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{" | taints="}{.spec.taints}{" | conditions="}{range .status.conditions[*]}{.type}={.status}:{.reason};{end}{"\n"}{end}' || true
+            echo "[debug] --- recent cluster events ---"
+            kubectl get events -A --sort-by=.lastTimestamp | tail -n 80 || true
+            echo "[debug] --- kube-system pods (networking/core) ---"
+            kubectl -n kube-system get pods -o wide | grep -E 'aws-node|coredns|ebs|csi|kube-proxy' || true
+
+            echo "[debug] --- nodegroup status (${NODEGROUP_NAME}) ---"
+            aws eks describe-nodegroup \
+              --cluster-name "$CLUSTER_NAME" \
+              --nodegroup-name "$NODEGROUP_NAME" \
+              --region "$AWS_REGION" \
+              --query 'nodegroup.{status:status,health:health.issues,scaling:scalingConfig}' \
+              --output json || true
+
+            asg_name="$(aws eks describe-nodegroup \
+              --cluster-name "$CLUSTER_NAME" \
+              --nodegroup-name "$NODEGROUP_NAME" \
+              --region "$AWS_REGION" \
+              --query 'nodegroup.resources.autoScalingGroups[0].name' \
+              --output text 2>/dev/null || true)"
+            if [[ -n "${asg_name}" && "${asg_name}" != "None" ]]; then
+              echo "[debug] --- ASG instances (${asg_name}) ---"
+              aws autoscaling describe-auto-scaling-groups \
+                --auto-scaling-group-names "$asg_name" \
+                --region "$AWS_REGION" \
+                --query 'AutoScalingGroups[0].{Desired:DesiredCapacity,Min:MinSize,Max:MaxSize,Instances:Instances[*].[InstanceId,LifecycleState,HealthStatus,AvailabilityZone]}' \
+                --output table || true
+              echo "[debug] --- recent ASG activities (${asg_name}) ---"
+              aws autoscaling describe-scaling-activities \
+                --auto-scaling-group-name "$asg_name" \
+                --region "$AWS_REGION" \
+                --max-items 10 \
+                --query 'Activities[*].[StartTime,StatusCode,Description,StatusMessage]' \
+                --output table || true
+            fi
+          }
+
+          while true; do
+            attempt=$((attempt + 1))
+            total_nodes="$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+            ready_nodes="$(kubectl get nodes --no-headers 2>/dev/null | awk '$2=="Ready"{count++} END{print count+0}')"
+            unreachable_nodes="$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.spec.taints}{"\n"}{end}' 2>/dev/null | grep -c 'node.kubernetes.io/unreachable' || true)"
+            echo "[info] gate attempt=${attempt} nodes total=${total_nodes} ready=${ready_nodes} unreachable_taints=${unreachable_nodes}"
+
+            if [[ "${ready_nodes}" -ge "${expected_ready}" && "${unreachable_nodes}" -eq 0 ]]; then
+              break
+            fi
+            if (( attempt % 3 == 0 )); then
+              print_debug_snapshot
+            fi
+            if [[ $SECONDS -ge $deadline ]]; then
+              echo "[error] node readiness gate failed after timeout"
+              print_debug_snapshot
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Enable EBS CSI Driver
+        run: |
+          bash infra/cluster/eksctl/bootstrap-ebs-csi.sh
+
+      - name: Verify EBS CSI addon and kube-system scheduling
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 600))
+          while true; do
+            addon_status="$(aws eks describe-addon \
+              --cluster-name "$CLUSTER_NAME" \
+              --addon-name aws-ebs-csi-driver \
+              --region "$AWS_REGION" \
+              --query 'addon.status' \
+              --output text)"
+            echo "[info] EBS CSI addon status=${addon_status}"
+            if [[ "$addon_status" == "ACTIVE" ]]; then
+              break
+            fi
+            if [[ $SECONDS -ge $deadline ]]; then
+              echo "[error] EBS CSI addon did not become ACTIVE"
+              aws eks describe-addon \
+                --cluster-name "$CLUSTER_NAME" \
+                --addon-name aws-ebs-csi-driver \
+                --region "$AWS_REGION"
+              kubectl -n kube-system get pods -o wide | grep -E 'ebs|csi|coredns' || true
+              kubectl -n kube-system get events --sort-by=.lastTimestamp | tail -n 120 || true
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Add Confluent Helm Repo
+        run: |
+          helm repo add confluentinc https://packages.confluent.io/helm
+          helm repo update
+
+      - name: Install CFK CRDs
+        run: |
+          CFK_CHART_VERSION="$(
+            awk '
+              $1 == "-" && $2 == "name:" && $3 == "confluent-for-kubernetes" { in_dep=1; next }
+              in_dep && $1 == "version:" { gsub(/"/, "", $2); print $2; exit }
+            ' infra/platform/charts/confluent-platform/Chart.yaml
+          )"
+          if [ -z "$CFK_CHART_VERSION" ]; then
+            echo "[error] unable to determine confluent-for-kubernetes chart version"
+            exit 1
+          fi
+          echo "Using confluent-for-kubernetes chart version: $CFK_CHART_VERSION"
+          helm show crds confluentinc/confluent-for-kubernetes --version "$CFK_CHART_VERSION" \
+            | kubectl apply --server-side --force-conflicts -f -
+
+      - name: Ensure confluent namespace and Docker Hub pull secret
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          kubectl create namespace confluent --dry-run=client -o yaml | kubectl apply -f -
+          if [[ -n "${DOCKERHUB_USERNAME:-}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
+            kubectl -n confluent create secret docker-registry dockerhub-cred \
+              --docker-server=https://index.docker.io/v1/ \
+              --docker-username="${DOCKERHUB_USERNAME}" \
+              --docker-password="${DOCKERHUB_TOKEN}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "Docker Hub creds not set; skipping dockerhub-cred creation."
+          fi
+
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build infra/platform/charts/confluent-platform
+
+      - name: Deploy Confluent Platform (prod)
+        run: |
+          helm upgrade --install confluent-platform \
+            infra/platform/charts/confluent-platform \
+            -n confluent \
+            -f infra/platform/environments/prod/values-prod.yaml \
+            -f /tmp/connectors-values.yaml \
+            --skip-crds
+
+      - name: Gate on node readiness after Confluent deploy
+        run: |
+          infra/platform/scripts/wait-node-readiness.sh "${PROD_NODEGROUP_DESIRED_SIZE}" 900
+
+      - name: Verify Kafka storage and broker health
+        run: |
+          infra/platform/scripts/wait-kafka-storage-ready.sh confluent kafka 900
+          infra/platform/scripts/smoke-kafka-health.sh confluent kafka 9092 3
+
+      - name: Verify Snowflake connector plugin is loaded
+        run: |
+          set -euo pipefail
+          kubectl -n confluent wait --for=condition=Ready pod/connect-0 --timeout=900s
+          CHECK_PLUGIN_ONLY=1 \
+          CONNECT_WAIT_TIMEOUT=180 \
+          CONNECT_NAMESPACE=confluent \
+          CONNECT_SERVICE=connect \
+          CONNECT_LOCAL_PORT=18083 \
+          CONNECTOR_CLASS=com.snowflake.kafka.connector.SnowflakeSinkConnector \
+          infra/platform/scripts/check-snowflake-connector-status.sh
+
+      - name: Apply connector configs and verify status
+        env:
+          SNOWFLAKE_PRIVATE_KEY_P8: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          infra/platform/scripts/apply-and-verify-connectors.sh confluent 900 confluent/config/connectors
+
+      - name: Run smoke checks
+        run: |
+          infra/platform/scripts/smoke-checks.sh confluent 600
+          infra/platform/scripts/smoke-kafka-verify.sh confluent kafka 9092 schemaregistry 8081 connect 8083

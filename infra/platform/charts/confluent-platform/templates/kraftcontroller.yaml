@@ -1,0 +1,38 @@
+{{- /*
+KRaft controller for Kafka. Enabled when .Values.kraftController.enabled is true.
+*/ -}}
+{{- if .Values.kraftController.enabled }}
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: KRaftController
+metadata:
+  name: {{ .Values.kraftController.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  {{- $controllerNodeId := (default 3000 .Values.kraftController.nodeId) }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  {{- range .Values.imagePullSecrets }}
+    - name: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.kraftController.podTemplate }}
+  podTemplate:
+{{ toYaml .Values.kraftController.podTemplate | nindent 4 }}
+  {{- end }}
+  replicas: {{ .Values.kraftController.replicas }}
+  image:
+    application: {{ .Values.kraftController.image }}
+    init: {{ .Values.kraftController.initImage }}
+  dataVolumeCapacity: {{ .Values.kraftController.storageSize }}
+  storageClass:
+    name: {{ .Values.kraftController.storageClass }}
+  configOverrides:
+    server:
+      - process.roles=controller
+      - node.id={{ $controllerNodeId }}
+      - broker.id={{ $controllerNodeId }}
+      - controller.quorum.voters={{ $controllerNodeId }}@{{ .Values.kraftController.name }}-0.{{ .Values.kraftController.name }}.{{ .Values.namespace }}.svc.cluster.local:9074
+      - controller.listener.names=CONTROLLER
+      - listeners=CONTROLLER://0.0.0.0:9074
+{{- end }}

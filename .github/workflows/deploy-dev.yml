@@ -1,0 +1,262 @@
+---
+name: Deploy Dev
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [dev]
+
+env:
+  CLUSTER_NAME: bookibet-dev
+  AWS_REGION: ap-southeast-2
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- AWS Auth via GitHub OIDC ---
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{secrets.AWS_ROLE_ARN}}
+          aws-region: ${{vars.AWS_REGION}}
+
+      - name: Deploy network stack (VPC/NAT/endpoints)
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name bookibet-dev-network \
+            --template-file infra/cloudformation/main.yml \
+            --parameter-overrides EnvironmentName=dev EnableNat=true EnableVpcEndpoints=true \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region "$AWS_REGION"
+
+      - name: Deploy API Gateway stack
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name bookibet-dev-api-gateway \
+            --template-file infra/cloudformation/api-gateway.yml \
+            --parameter-overrides EnvironmentName=dev ApiNamePrefix=bookibet \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region "$AWS_REGION"
+
+      - name: Publish connector plugins to S3
+        run: |
+          set -euo pipefail
+          CONNECTOR_BUCKET="$(aws cloudformation describe-stacks \
+            --stack-name bookibet-dev-network \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='ConnectorBucketName'].OutputValue" \
+            --output text)"
+          if [[ -z "$CONNECTOR_BUCKET" || "$CONNECTOR_BUCKET" == "None" ]]; then
+            echo "Connector bucket output not found."
+            exit 1
+          fi
+          infra/platform/scripts/publish-connectors-s3.sh "$CONNECTOR_BUCKET" "$AWS_REGION"
+          infra/platform/scripts/generate-connectors-values.sh "$CONNECTOR_BUCKET" "$AWS_REGION" /tmp/connectors-values.yaml
+
+      - name: Install eksctl
+        run: |
+          curl -sSL "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" \
+            | tar -xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin/eksctl
+          eksctl version
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      # --- EKS CLUSTER CREATION ---
+      - name: Create EKS Cluster if not exists
+        run: |
+          set -euo pipefail
+          STACK_NAME="eksctl-${CLUSTER_NAME}-cluster"
+          STACK_STATUS="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          if eksctl get cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Cluster $CLUSTER_NAME already exists; skipping creation."
+          elif [ -n "$STACK_STATUS" ]; then
+            echo "CloudFormation stack $STACK_NAME exists with status: $STACK_STATUS. Deleting to recreate."
+            case "$STACK_STATUS" in
+              *IN_PROGRESS*)
+                echo "Stack is still in progress. Re-run this workflow after it completes."
+                exit 1
+                ;;
+              *)
+                echo "Disabling termination protection on $STACK_NAME (if enabled)..."
+                aws cloudformation update-termination-protection --stack-name "$STACK_NAME" --region "$AWS_REGION" --no-enable-termination-protection || true
+                aws cloudformation delete-stack --stack-name "$STACK_NAME" --region "$AWS_REGION" || true
+                if ! aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" --region "$AWS_REGION"; then
+                  echo "Delete failed for $STACK_NAME. Recent stack events:"
+                  aws cloudformation describe-stack-events --stack-name "$STACK_NAME" --region "$AWS_REGION" --max-items 25 || true
+                  exit 1
+                fi
+                ;;
+            esac
+          fi
+          if ! eksctl get cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            eksctl create cluster -f infra/cluster/eksctl/cluster-dev.yaml
+          fi
+
+      - name: Ensure default nodegroup exists
+        run: |
+          set -euo pipefail
+          NODEGROUP_STACK="eksctl-${CLUSTER_NAME}-nodegroup-ng-spot"
+          NODEGROUP_STATUS="$(aws cloudformation describe-stacks --stack-name "$NODEGROUP_STACK" --region "$AWS_REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true)"
+          echo "[info] nodegroup stack: $NODEGROUP_STACK status: ${NODEGROUP_STATUS:-none}"
+
+          delete_stack_if_failed() {
+            local name="$1"
+            local status="$2"
+            case "$status" in
+              *FAILED|*ROLLBACK*)
+                echo "[info] deleting failed stack $name (status $status)"
+                aws cloudformation update-termination-protection \
+                  --stack-name "$name" \
+                  --region "$AWS_REGION" \
+                  --no-enable-termination-protection || true
+                aws cloudformation delete-stack --stack-name "$name" --region "$AWS_REGION" || true
+                if ! aws cloudformation wait stack-delete-complete --stack-name "$name" --region "$AWS_REGION"; then
+                  echo "[warn] delete failed for $name. Recent stack events:"
+                  aws cloudformation describe-stack-events \
+                    --stack-name "$name" \
+                    --region "$AWS_REGION" \
+                    --max-items 25 \
+                    --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Type:ResourceType,LogicalId:LogicalResourceId,Reason:ResourceStatusReason}' \
+                    --output table || true
+                  exit 1
+                fi
+                ;;
+            esac
+          }
+
+          delete_stack_if_failed "$NODEGROUP_STACK" "$NODEGROUP_STATUS"
+
+          if ! eksctl get nodegroup --cluster "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "[info] no nodegroups found; creating from cluster-dev.yaml..."
+            set +e
+            eksctl create nodegroup -f infra/cluster/eksctl/cluster-dev.yaml
+            rc=$?
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "[error] nodegroup creation failed (exit $rc); recent CloudFormation events:"
+              aws cloudformation describe-stack-events \
+                --stack-name "$NODEGROUP_STACK" \
+                --region "$AWS_REGION" \
+                --max-items 25 \
+                --query 'StackEvents[*].{Time:Timestamp,Status:ResourceStatus,Type:ResourceType,LogicalId:LogicalResourceId,Reason:ResourceStatusReason}' \
+                --output table || true
+              echo "[info] stack description (if present):"
+              aws cloudformation describe-stacks \
+                --stack-name "$NODEGROUP_STACK" \
+                --region "$AWS_REGION" \
+                --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason,LastUpdated:LastUpdatedTime}' \
+                --output json || true
+              exit "$rc"
+            fi
+          else
+            echo "[info] nodegroup(s) already present; skipping creation."
+          fi
+
+      - name: Configure kubeconfig
+        run: |
+          set -euo pipefail
+          if ! aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Cluster $CLUSTER_NAME not found. Ensure it exists or clean up stale CloudFormation stack and re-run."
+            exit 1
+          fi
+          aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+
+      # --- EBS CSI Driver ---
+      - name: Enable EBS CSI Driver
+        run: |
+          bash infra/cluster/eksctl/bootstrap-ebs-csi.sh
+
+      # --- Install CFK ---
+      - name: Add Confluent Helm Repo
+        run: |
+          helm repo add confluentinc https://packages.confluent.io/helm
+          helm repo update
+
+      - name: Install CFK CRDs
+        run: |
+          helm show crds confluentinc/confluent-for-kubernetes | kubectl apply -f -
+
+      - name: Ensure confluent namespace and Docker Hub pull secret
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          kubectl create namespace confluent --dry-run=client -o yaml | kubectl apply -f -
+          if [[ -n "${DOCKERHUB_USERNAME:-}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
+            kubectl -n confluent create secret docker-registry dockerhub-cred \
+              --docker-server=https://index.docker.io/v1/ \
+              --docker-username="${DOCKERHUB_USERNAME}" \
+              --docker-password="${DOCKERHUB_TOKEN}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "Docker Hub creds not set; skipping dockerhub-cred creation."
+          fi
+
+      - name: Ensure Snowflake private key secret
+        env:
+          SNOWFLAKE_PRIVATE_KEY_P8: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${SNOWFLAKE_PRIVATE_KEY_P8:-}" ]]; then
+            umask 077
+            printf '%s' "${SNOWFLAKE_PRIVATE_KEY_P8}" > /tmp/rsa_key.p8
+            kubectl -n confluent create secret generic snowflake-private-key \
+              --from-file=rsa_key.p8=/tmp/rsa_key.p8 \
+              --dry-run=client -o yaml | kubectl apply -f -
+            rm -f /tmp/rsa_key.p8
+          else
+            echo "Snowflake private key not set; skipping snowflake-private-key creation."
+          fi
+
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build infra/platform/charts/confluent-platform
+
+      # --- Deploy the Confluent Platform via Helm ---
+      - name: Deploy Confluent Platform (Kafka, Connect, SR)
+        run: |
+          helm upgrade --install confluent-platform \
+            infra/platform/charts/confluent-platform \
+            -n confluent \
+            -f infra/platform/environments/dev/values-dev.yaml \
+            -f /tmp/connectors-values.yaml
+
+      - name: Apply connector configs and verify status
+        env:
+          SNOWFLAKE_PRIVATE_KEY_P8: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          infra/platform/scripts/apply-and-verify-connectors.sh confluent 900 confluent/config/connectors
+
+      - name: Deploy Kong Gateway (DB-less)
+        run: |
+          set -euo pipefail
+          kubectl create namespace kong --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n kong create configmap kong-config \
+            --from-file=kong.yaml=infra/kong/kong.yaml \
+            --dry-run=client -o yaml | kubectl apply -f -
+          helm repo add kong https://charts.konghq.com >/dev/null 2>&1 || true
+          helm repo update
+          helm upgrade --install kong kong/kong -n kong -f infra/kong/values-kong.yaml
+
+      - name: Run smoke checks
+        run: |
+          infra/platform/scripts/smoke-checks.sh confluent 600
+          infra/platform/scripts/smoke-kafka-verify.sh confluent kafka 9092 schemaregistry 8081 connect 8083

@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neuroplastiq
+  namespace: neuroplastiq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neuroplastiq
+  template:
+    metadata:
+      labels:
+        app: neuroplastiq
+    spec:
+      containers:
+        - name: neuroplastiq
+          image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SCHEMA_REGISTRY_URL
+              value: "http://schemaregistry.confluent.svc.cluster.local:8081"
+            - name: DOMAIN
+              value: "npf"
+            - name: LOG_LEVEL
+              value: "info"
+          envFrom:
+            - secretRef:
+                name: neuroplastiq-secrets

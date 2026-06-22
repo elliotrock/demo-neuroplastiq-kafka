@@ -1,0 +1,105 @@
+---
+global:
+  name: bookibet-staging
+  replicas: 1
+  storageClass: gp3-ebs
+
+kraftController:
+  enabled: true
+  name: kafka-controller
+  nodeId: 3000
+  replicas: 1
+  image: confluentinc/cp-server:7.6.1
+  initImage: confluentinc/confluent-init-container:2.8.3
+  storageClass: gp3-ebs
+  storageSize: 10Gi
+  podTemplate:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+kafka:
+  replicas: 3
+  storageSize: 50Gi
+  config:
+    num.partitions: 3
+    default.replication.factor: 3
+    min.insync.replicas: 2
+    auto.create.topics.enable: true
+    offsets.topic.replication.factor: 3
+    transaction.state.log.replication.factor: 3
+    transaction.state.log.min.isr: 2
+    confluent.license.topic.replication.factor: 3
+    confluent.metadata.topic.replication.factor: 3
+    confluent.metrics.reporter.topic.replicas: 3
+    confluent.cluster.link.enable: false
+    confluent.balancer.enable: false
+  storage:
+    size: 50Gi
+  podTemplate:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 700Mi
+      limits:
+        cpu: 500m
+        memory: 1100Mi
+
+schemaregistry:
+  replicas: 1
+  podTemplate:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+schemaRegistryLoadBalancer:
+  enabled: true
+  annotations: {}
+  selector:
+    app: schemaregistry
+
+connect:
+  replicas: 1
+  storage:
+    size: 10Gi
+  envFromSecret: connector-secrets
+  podTemplate:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+kafkaRestProxy:
+  enabled: true
+  replicas: 1
+  configOverrides:
+    server:
+      - value.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+      - key.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+      - producer.value.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+      - producer.key.subject.name.strategy=io.confluent.kafka.serializers.subject.RecordNameStrategy
+  podTemplate:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+kafkaRestProxyLoadBalancer:
+  enabled: true
+  annotations: {}
+  selector:
+    app: kafka-rest

@@ -1,0 +1,25 @@
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: SchemaRegistry
+metadata:
+  name: schemaregistry
+  namespace: {{.Values.namespace}}
+spec:
+  {{- $bootstrapEndpoint := .Values.kafka.bootstrapEndpoint | default (printf "kafka.%s.svc.cluster.local:%v" .Values.namespace (.Values.kafka.bootstrapPort | default 9092)) }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  {{- range .Values.imagePullSecrets }}
+    - name: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.schemaRegistry.podTemplate }}
+  podTemplate:
+{{ toYaml .Values.schemaRegistry.podTemplate | nindent 4 }}
+  {{- end }}
+  replicas: {{.Values.schemaRegistry.replicas}}
+  image:
+    application: confluentinc/cp-schema-registry:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  dependencies:
+    kafka:
+      bootstrapEndpoint: {{ $bootstrapEndpoint }}

@@ -1,0 +1,31 @@
+---
+# infra/platform/environments/dev/irsa-overrides.yaml
+# Helm overrides to use IRSA service accounts created via eksctl
+namespace: confluent
+
+# CFK / Confluent Operator (if you override service account)
+confluentOperator:
+  serviceAccount:
+    create: false
+    name: cfk-controller
+
+# Kafka (KRaft brokers) pod/service account binding
+kafka:
+  podTemplate:
+    serviceAccountName: kafka-broker
+  config:
+    # ensure KRaft config stays, etc - these are examples
+    process.roles: "broker,controller"
+
+# Schema Registry
+schemaRegistry:
+  podTemplate:
+    serviceAccountName: schema-registry
+
+# Kafka Connect
+connect:
+  podTemplate:
+    serviceAccountName: connect-worker
+
+# If your chart uses a different key naming, these values may need adjustment.
+# Many charts use top-level "podTemplate" blocks — match your Chart's structure.

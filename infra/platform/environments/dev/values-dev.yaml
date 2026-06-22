@@ -1,0 +1,29 @@
+---
+namespace: confluent
+
+kafka:
+  replicas: 1
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"
+
+schemaRegistry:
+  replicas: 1
+
+connect:
+  replicas: 1
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"
+
+connectPlugins: []
+
+imagePullSecrets:
+  - dockerhub-cred
+
+kraftController:
+  enabled: true
+  name: kafka-controller
+  replicas: 1
+  image: confluentinc/cp-server:7.6.1
+  initImage: confluentinc/confluent-init-container:2.8.3
+  storageClass: "ebs-sc"
+  storageSize: "10Gi"

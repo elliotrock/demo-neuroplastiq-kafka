@@ -1,0 +1,38 @@
+---
+apiVersion: platform.confluent.io/v1beta1
+kind: Kafka
+metadata:
+  name: kafka
+  namespace: {{.Values.namespace}}
+spec:
+  {{- $controllerNodeId := (default 3000 .Values.kraftController.nodeId) }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  {{- range .Values.imagePullSecrets }}
+    - name: {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.kafka.podTemplate }}
+  podTemplate:
+{{ toYaml .Values.kafka.podTemplate | nindent 4 }}
+  {{- end }}
+  replicas: {{.Values.kafka.replicas}}
+  {{- if hasKey .Values.kafka "oneReplicaPerNode" }}
+  oneReplicaPerNode: {{ .Values.kafka.oneReplicaPerNode }}
+  {{- end }}
+  image:
+    application: confluentinc/cp-server:7.6.1
+    init: confluentinc/confluent-init-container:2.8.3
+  {{- $kafkaStorage := .Values.kafka.storage | default dict }}
+  dataVolumeCapacity: {{ $kafkaStorage.size | default .Values.kafka.storageSize }}
+  storageClass:
+    name: {{.Values.kafka.storageClass}}
+  configOverrides:
+    server:
+      - process.roles=broker
+      - controller.quorum.voters={{ $controllerNodeId }}@{{ .Values.kraftController.name }}-0.{{ .Values.kraftController.name }}.{{ .Values.namespace }}.svc.cluster.local:9074
+      {{- if .Values.kafka.config }}
+      {{- range $key, $value := .Values.kafka.config }}
+      - {{ $key }}={{ $value }}
+      {{- end }}
+      {{- end }}

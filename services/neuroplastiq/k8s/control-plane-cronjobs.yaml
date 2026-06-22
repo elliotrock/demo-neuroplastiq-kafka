@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: neuroplastiq-control-plane
+  namespace: neuroplastiq
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: neuroplastiq-control-plane
+  namespace: neuroplastiq
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/exec
+      - pods/portforward
+      - services
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs:
+      - get
+      - list
+      - patch
+      - watch
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: neuroplastiq-control-plane
+  namespace: neuroplastiq
+subjects:
+  - kind: ServiceAccount
+    name: neuroplastiq-control-plane
+    namespace: neuroplastiq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: neuroplastiq-control-plane
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: neuroplastiq-control-plane-master
+  namespace: neuroplastiq
+spec:
+  schedule: "0 * * * *"
+  timeZone: "Australia/Sydney"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: neuroplastiq-control-plane
+          restartPolicy: Never
+          containers:
+            - name: control-plane
+              image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: SCHEMA_REGISTRY_URL
+                  value: "http://schemaregistry.confluent.svc.cluster.local:8081"
+                - name: DOMAIN
+                  value: "npf"
+                - name: LOG_LEVEL
+                  value: "info"
+                - name: TZ
+                  value: "Australia/Sydney"
+                - name: DAILY_HOUR
+                  value: "02"
+              envFrom:
+                - secretRef:
+                    name: neuroplastiq-secrets
+              command:
+                - /bin/bash
+                - -lc
+              args:
+                - |
+                  set -euo pipefail
+
+                  plan="core/control_plane/plans/master-hourly.yaml"
+                  hour="$(date +%H)"
+                  if [[ "$hour" == "$DAILY_HOUR" ]]; then
+                    plan="core/control_plane/plans/master-daily.yaml"
+                  fi
+
+                  echo "Running Neuroplastiq control-plane plan: ${plan}"
+                  python3 -m core.control_plane --plan "${plan}"

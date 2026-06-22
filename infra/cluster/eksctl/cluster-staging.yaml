@@ -1,0 +1,114 @@
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: bookibet-staging
+  region: ap-southeast-2
+  version: "1.29"
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: cfk-controller
+        namespace: confluent
+      roleName: cfk-controller-staging
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+
+    - metadata:
+        name: kafka-broker
+        namespace: confluent
+      roleName: kafka-broker-staging
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+
+    - metadata:
+        name: connect-worker
+        namespace: confluent
+      roleName: connect-worker-staging
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+    - metadata:
+        name: schema-registry
+        namespace: confluent
+      roleName: schema-registry-staging
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+
+vpc:
+  nat:
+    gateway: Single
+
+nodeGroups:
+  - name: ng-medium
+    instanceType: t3.medium
+    desiredCapacity: 4
+    minSize: 4
+    maxSize: 4
+    volumeSize: 50
+    privateNetworking: true
+    ssh:
+      allow: false
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+managedNodeGroups:
+  # Dedicated Confluent pools are split by AZ so zonal Kafka PVCs and
+  # one-replica-per-node scheduling always have replacement capacity.
+  - name: ng-confluent-2a
+    instanceType: t3.large
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 2
+    availabilityZones:
+      - ap-southeast-2a
+    labels:
+      workload.bookibet.io/pool: confluent
+    taints:
+      - key: dedicated
+        value: confluent
+        effect: NoSchedule
+    volumeSize: 80
+    privateNetworking: true
+    ssh:
+      allow: false
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  - name: ng-confluent-2b
+    instanceType: t3.large
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 2
+    availabilityZones:
+      - ap-southeast-2b
+    labels:
+      workload.bookibet.io/pool: confluent
+    taints:
+      - key: dedicated
+        value: confluent
+        effect: NoSchedule
+    volumeSize: 80
+    privateNetworking: true
+    ssh:
+      allow: false
+    iam:
+      attachPolicyARNs:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+addons:
+  - name: kube-proxy
+    version: latest
+  - name: vpc-cni
+    version: latest

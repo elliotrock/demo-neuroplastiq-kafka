@@ -1,0 +1,502 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Bookibet bootstrap infrastructure
+  Creates VPC, subnets, NAT, S3 buckets, KMS, CloudTrail for an environment.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: Short environment name (dev/staging/prod)
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnetCidrs:
+    Type: CommaDelimitedList
+    Default: 10.0.0.0/24,10.0.1.0/24
+    Description: Two public subnet CIDRs (comma separated)
+  PrivateSubnetCidrs:
+    Type: CommaDelimitedList
+    Default: 10.0.2.0/24,10.0.3.0/24
+    Description: Two private subnet CIDRs (comma separated)
+  EnableNat:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: Whether to create a NAT Gateway for private subnet outbound internet
+  EnableVpcEndpoints:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: Whether to create VPC endpoints for STS/ECR/S3 to support private EKS nodes
+  S3BucketPrefix:
+    Type: String
+    Default: bookibet
+    Description: Prefix for S3 bucket names (will append account & region for uniqueness)
+
+Mappings:
+  RegionMap:
+    ap-southeast-2:
+      AZ1: "ap-southeast-2a"
+      AZ2: "ap-southeast-2b"
+    default:
+      AZ1: "ap-southeast-2a"
+      AZ2: "ap-southeast-2b"
+
+Conditions:
+  CreateNAT: !Equals [!Ref EnableNat, "true"]
+  CreateEndpoints: !Equals [!Ref EnableVpcEndpoints, "true"]
+
+Resources:
+
+  # VPC and networking
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-vpc"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-igw"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public subnets (2)
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [0, !Ref PublicSubnetCidrs]
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-public-1"
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [1, !Ref PublicSubnetCidrs]
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ2]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-public-2"
+
+  # Private subnets (2)
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [0, !Ref PrivateSubnetCidrs]
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ1]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-private-1"
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [1, !Ref PrivateSubnetCidrs]
+      AvailabilityZone: !FindInMap [RegionMap, !Ref "AWS::Region", AZ2]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-private-2"
+
+  # Public route table & route to IGW
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # NAT Gateway (EIP + NAT) - created only if CreateNAT = true
+  NatEip:
+    Type: AWS::EC2::EIP
+    Condition: CreateNAT
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-nat-eip"
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: CreateNAT
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-natgw"
+
+  # Private route table and route via NAT (if NAT created)
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-private-rt"
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateNAT
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateEndpoints
+    Properties:
+      GroupDescription: Allow HTTPS from VPC to interface endpoints
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-endpoints-sg"
+
+  StsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sts"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-sts-endpoint"
+
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-ecr-api-endpoint"
+
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-ecr-dkr-endpoint"
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateEndpoints
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcId: !Ref VPC
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-s3-endpoint"
+
+  # Security group for platform components - allow all outbound, minimal inbound
+  PlatformSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Platform base security group - allow outbound to internet
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress: []
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-sg"
+
+  # S3 buckets (unique names using account & region)
+  RawBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${S3BucketPrefix}-${EnvironmentName}-raw-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-raw"
+
+  DRBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${S3BucketPrefix}-${EnvironmentName}-dr-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-dr"
+
+  PowerBIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${S3BucketPrefix}-${EnvironmentName}-powerbi-${AWS::AccountId}-${AWS::Region}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-powerbi"
+
+  ConnectorBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${S3BucketPrefix}-${EnvironmentName}-connectors-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-connectors"
+
+  # ECR repository for Neuroplastiq (NPF)
+  NeuroplastiqEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${S3BucketPrefix}-${EnvironmentName}-neuroplastiq"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: MUTABLE
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-neuroplastiq"
+
+  # KMS Key
+  PlatformKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "KMS key for ${S3BucketPrefix}-${EnvironmentName} resources"
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "Enable IAM User Permissions"
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: "AllowKeyAdminForDeployRole"
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/github-actions-deploy-${EnvironmentName}"
+            Action:
+              - "kms:PutKeyPolicy"
+              - "kms:UpdateKeyDescription"
+              - "kms:EnableKeyRotation"
+              - "kms:DisableKeyRotation"
+              - "kms:TagResource"
+              - "kms:UntagResource"
+              - "kms:ScheduleKeyDeletion"
+              - "kms:CancelKeyDeletion"
+            Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub "${S3BucketPrefix}-${EnvironmentName}-kms"
+  PlatformKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${S3BucketPrefix}-${EnvironmentName}-kms"
+      TargetKeyId: !Ref PlatformKmsKey
+
+  # CloudTrail bucket for logs
+  # ------------------------------------------------------------------
+  # EKS IAM roles (cluster + nodegroup + optional pod execution)
+  # ------------------------------------------------------------------
+  BookibetEKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BookibetEKSClusterRole-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      Tags:
+        - Key: Project
+          Value: Bookibet
+        - Key: RoleType
+          Value: Cluster
+
+  BookibetNodegroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BookibetNodegroupRole-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Project
+          Value: Bookibet
+        - Key: RoleType
+          Value: Nodegroup
+
+  BookibetEKSPodExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "BookibetEKSPodExecutionRole-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks-fargate-pods.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
+      Tags:
+        - Key: Project
+          Value: Bookibet
+        - Key: RoleType
+          Value: PodExecution
+
+Outputs:
+  VpcId:
+    Description: VPC id
+    Value: !Ref VPC
+  StsEndpointId:
+    Condition: CreateEndpoints
+    Description: STS interface endpoint ID
+    Value: !Ref StsEndpoint
+  PublicSubnetIds:
+    Description: Comma separated public subnet ids
+    Value: !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+  PrivateSubnetIds:
+    Description: Comma separated private subnet ids
+    Value: !Join [",", [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+  NatGatewayId:
+    Description: NAT Gateway (if created)
+    Value: !If [CreateNAT, !Ref NatGateway, "none"]
+  RawBucketName:
+    Description: Raw data S3 bucket
+    Value: !Ref RawBucket
+  DrBucketName:
+    Description: DR S3 bucket
+    Value: !Ref DRBucket
+  PowerBIBucketName:
+    Description: PowerBI S3 bucket
+    Value: !Ref PowerBIBucket
+  ConnectorBucketName:
+    Description: Connector plugins S3 bucket
+    Value: !Ref ConnectorBucket
+  NeuroplastiqEcrRepositoryUri:
+    Description: ECR repository URI for Neuroplastiq images
+    Value: !GetAtt NeuroplastiqEcrRepository.RepositoryUri
+  NeuroplastiqEcrRepositoryName:
+    Description: ECR repository name for Neuroplastiq images
+    Value: !Ref NeuroplastiqEcrRepository
+  KmsKeyArn:
+    Description: Platform KMS Key ARN
+    Value: !GetAtt PlatformKmsKey.Arn
+  CloudTrailBucketName:
+    Description: CloudTrail S3 bucket name
+    Value: "disabled"
+  EKSClusterRoleArn:
+    Description: ARN for Bookibet EKS Cluster Role
+    Value: !GetAtt BookibetEKSClusterRole.Arn
+  EKSNodegroupRoleArn:
+    Description: ARN for Bookibet Nodegroup Role
+    Value: !GetAtt BookibetNodegroupRole.Arn
+  EKSPodExecutionRoleArn:
+    Description: ARN for Bookibet Pod Execution Role (Fargate/addons)
+    Value: !GetAtt BookibetEKSPodExecutionRole.Arn

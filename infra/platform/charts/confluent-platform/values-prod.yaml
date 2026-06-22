@@ -1,0 +1,49 @@
+---
+global:
+  name: bookibet-prod
+  replicas: 3
+  storageClass: gp3-ebs
+
+kraftController:
+  enabled: true
+  name: kafka-controller
+  nodeId: 3000
+  replicas: 1
+  image: confluentinc/cp-server:7.6.1
+  initImage: confluentinc/confluent-init-container:2.8.3
+  storageClass: gp3-ebs
+  storageSize: 10Gi
+
+kafka:
+  replicas: 3
+  storageSize: 200Gi
+  config:
+    num.partitions: 12
+    default.replication.factor: 3
+    min.insync.replicas: 2
+    log.retention.hours: 72
+  storage:
+    size: 200Gi
+
+schemaregistry:
+  replicas: 3
+
+schemaRegistryLoadBalancer:
+  enabled: true
+  annotations: {}
+  selector:
+    app: schemaregistry
+
+connect:
+  replicas: 3
+  storage:
+    size: 50Gi
+  envFromSecret: connector-secrets-prod
+
+resources:
+  requests:
+    cpu: 1
+    memory: 2Gi
+  limits:
+    cpu: 2
+    memory: 4Gi

@@ -11,6 +11,7 @@ Phase 1 converts the copied infra tree into a clearly scoped Kafka demo repo. Th
 - Replaced the copied Bookibet README with a demo-specific README.
 - Added this cleanup log under `docs/`.
 - Hardened `.gitignore` for Python, Node, Terraform, Helm dependency archives, local secrets, generated files, and Windows metadata sidecars.
+- Kept the copied staging deployment workflow as the demo deployment path and changed its push trigger from `staging` to `main` to preserve the known-working deployment mechanics under time constraints.
 - Removed clearly accidental/generated files:
   - `*:Zone.Identifier`
   - `costs_01_26.csv`
@@ -40,7 +41,6 @@ snowflake/
 infra/cluster/eksctl/cluster-staging.yaml
 infra/cluster/eksctl/cluster-prod.yaml
 infra/terraform/snowflake/
-.github/workflows/deploy-staging.yml
 .github/workflows/deploy-prod.yml
 ```
 
@@ -51,6 +51,6 @@ Do not delete these blindly if they contain useful examples. Either move them to
 1. Create `environments/local/` and `environments/cloud-demo/`.
 2. Move the demo Kafka values out of `infra/platform/environments/dev/` into the new environment shape.
 3. Rename or wrap smoke scripts under top-level `scripts/`.
-4. Remove production/staging deploy workflows from the demo repo after confirming no reusable CI logic is needed.
+4. Remove unused production deploy workflows from the demo repo after confirming no reusable CI logic is needed.
 5. Move product code references to image/config contracts instead of keeping copied `app/` and `core/` code.
 6. Decide whether Snowflake remains as a later optional demo or moves to a separate `demo-neuroplastiq-snowflake-sink` repo.

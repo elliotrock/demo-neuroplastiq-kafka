@@ -57,38 +57,6 @@ jobs:
             --capabilities CAPABILITY_NAMED_IAM \
             --region "$AWS_REGION"
 
-      - name: Publish connector plugins to S3
-        run: |
-          set -euo pipefail
-          CONNECTOR_BUCKET="$(aws cloudformation describe-stacks \
-            --stack-name bookibet-staging-network \
-            --region "$AWS_REGION" \
-            --query "Stacks[0].Outputs[?OutputKey=='ConnectorBucketName'].OutputValue" \
-            --output text)"
-          if [[ -z "$CONNECTOR_BUCKET" || "$CONNECTOR_BUCKET" == "None" ]]; then
-            echo "Connector bucket output not found."
-            exit 1
-          fi
-          mkdir -p confluent/connectors
-          echo "[info] syncing connector ZIP artifacts from s3://${CONNECTOR_BUCKET}/connectors/ ..."
-          aws s3 sync "s3://${CONNECTOR_BUCKET}/connectors/" confluent/connectors/ \
-            --region "$AWS_REGION" \
-            --exclude "*" \
-            --include "*.zip"
-          if ! find confluent/connectors -type f -name "*.zip" | grep -q .; then
-            echo "[error] no connector ZIP artifacts found after S3 sync."
-            echo "[info] listing s3://${CONNECTOR_BUCKET}/connectors/:"
-            aws s3 ls "s3://${CONNECTOR_BUCKET}/connectors/" --recursive --region "$AWS_REGION" || true
-            exit 1
-          fi
-          infra/platform/scripts/publish-connectors-s3.sh "$CONNECTOR_BUCKET" "$AWS_REGION"
-          infra/platform/scripts/generate-connectors-values.sh "$CONNECTOR_BUCKET" "$AWS_REGION" /tmp/connectors-values.yaml
-          if ! grep -q "archivePath:" /tmp/connectors-values.yaml; then
-            echo "[error] connectors-values.yaml has no plugin archives; refusing to continue."
-            cat /tmp/connectors-values.yaml
-            exit 1
-          fi
-
       - name: Prepare eksctl config (use network VPC)
         run: |
           set -euo pipefail
@@ -574,22 +542,6 @@ jobs:
             echo "Docker Hub creds not set; skipping dockerhub-cred creation."
           fi
 
-      - name: Ensure Snowflake private key secret
-        env:
-          SNOWFLAKE_PRIVATE_KEY_P8: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_P8 }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${SNOWFLAKE_PRIVATE_KEY_P8:-}" ]]; then
-            umask 077
-            printf '%s' "${SNOWFLAKE_PRIVATE_KEY_P8}" > /tmp/rsa_key.p8
-            kubectl -n confluent create secret generic snowflake-private-key \
-              --from-file=rsa_key.p8=/tmp/rsa_key.p8 \
-              --dry-run=client -o yaml | kubectl apply -f -
-            rm -f /tmp/rsa_key.p8
-          else
-            echo "Snowflake private key not set; skipping snowflake-private-key creation."
-          fi
-
       - name: Build Helm dependencies
         run: |
           helm dependency build infra/platform/charts/confluent-platform
@@ -644,7 +596,6 @@ jobs:
             infra/platform/charts/confluent-platform \
             -n confluent \
             -f infra/platform/environments/staging/values-staging.yaml \
-            -f /tmp/connectors-values.yaml \
             --skip-crds
 
       - name: Gate on node readiness after Confluent deploy
@@ -660,14 +611,6 @@ jobs:
           infra/platform/scripts/wait-kafka-storage-ready.sh confluent kafka 900
           KAFKA_URP_MODE=leader-only \
           infra/platform/scripts/smoke-kafka-health.sh confluent kafka 9092 3
-
-      - name: Apply connector configs and verify status
-        env:
-          SNOWFLAKE_PRIVATE_KEY_P8: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_P8 }}
-          CONNECT_INTERNAL_TOPIC_AUTOREPAIR: "true"
-        run: |
-          set -euo pipefail
-          infra/platform/scripts/apply-and-verify-connectors.sh confluent 900 confluent/config/connectors
 
       - name: Run smoke checks
         run: |

@@ -68,6 +68,7 @@ kafka:
 
 connect:
   replicas: 1
+  secretMount: null
   offsetStorageReplicationFactor: 3
   configStorageReplicationFactor: 3
   statusStorageReplicationFactor: 3

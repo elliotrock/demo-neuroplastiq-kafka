@@ -116,7 +116,7 @@ SNOWFLAKE_PRIVATE_KEY_P8
 SNOWFLAKE_USERNAME
 ```
 
-Important caveat: the copied workflow and scripts still contain Snowflake connector support. If the Snowflake connector config remains applied, the deployment may still expect `SNOWFLAKE_PRIVATE_KEY_P8`. For a Kafka-only demo, the safer path is to disable or remove the Snowflake connector config from the demo deployment rather than carry Snowflake secrets forward.
+The active deployment workflow no longer publishes connector plugin ZIPs, mounts the Snowflake private key, or applies Snowflake connector configs. Snowflake material may still exist in copied reference files, but it is intentionally outside the demo deployment path.
 
 ## Hard-Coded Current Workflow Values
 

@@ -3,6 +3,9 @@ bookibet-docs/private/
 .codex
 .codex/
 
+# AWS Policies
+policies/
+
 # Local test artifacts
 bm-test-stub.sh
 postman-collection.json

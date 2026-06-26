@@ -10,7 +10,7 @@
         "ec2:GetLaunchTemplateData",
         "ec2:RunInstances"
       ],
-      "Resource": "arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*"
+      "Resource": "arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*"
     },
     {
       "Sid": "ManageNodegroupASG",
@@ -49,8 +49,8 @@
         "eks:ListAssociatedAccessPolicies"
       ],
       "Resource": [
-        "arn:aws:eks:ap-southeast-2:*:cluster/bookibet-prod",
-        "arn:aws:eks:ap-southeast-2:*:access-entry/bookibet-prod/*"
+        "arn:aws:eks:ap-southeast-2:*:cluster/neuro-prod",
+        "arn:aws:eks:ap-southeast-2:*:access-entry/neuro-prod/*"
       ]
     },
     {
@@ -66,7 +66,7 @@
         "iam:UntagInstanceProfile",
         "iam:ListInstanceProfilesForRole"
       ],
-      "Resource": "arn:aws:iam::*:instance-profile/eksctl-bookibet-prod-nodegroup-*"
+      "Resource": "arn:aws:iam::*:instance-profile/eksctl-neuro-prod-nodegroup-*"
     },
     {
       "Sid": "PassRoleEksctl",
@@ -243,7 +243,7 @@
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
       "Resource": [
-        "arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*",
+        "arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*",
         "arn:aws:ec2:ap-southeast-2:*:instance/*",
         "arn:aws:ec2:ap-southeast-2:*:image/*",
         "arn:aws:ec2:ap-southeast-2:*:security-group/*",
@@ -294,7 +294,7 @@
         "iam:ListAttachedRolePolicies"
       ],
       "Resource": [
-        "arn:aws:iam::*:role/Bookibet*",
+        "arn:aws:iam::*:role/Neuro*",
         "arn:aws:iam::*:role/cfk-*",
         "arn:aws:iam::*:role/kafka-*",
         "arn:aws:iam::*:role/connect-*",
@@ -333,7 +333,7 @@
       "Sid": "PassRoleRestrictedToEKS",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::*:role/Bookibet*",
+      "Resource": "arn:aws:iam::*:role/Neuro*",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": [

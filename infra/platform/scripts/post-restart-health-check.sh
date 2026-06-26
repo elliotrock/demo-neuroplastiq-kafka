@@ -6,13 +6,13 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 CONFLUENT_NAMESPACE="${CONFLUENT_NAMESPACE:-confluent}"
 
 NEURO_NAMESPACE="${NEURO_NAMESPACE:-neuroplastiq}"
-BOOKI_NAMESPACE="${BOOKI_NAMESPACE:-default}"
+NEURO_NAMESPACE="${NEURO_NAMESPACE:-default}"
 
 NEURO_SERVICE="${NEURO_SERVICE:-}"
-BOOKI_SERVICE="${BOOKI_SERVICE:-}"
+NEURO_SERVICE="${NEURO_SERVICE:-}"
 
 NEURO_PORT="${NEURO_PORT:-8000}"
-BOOKI_PORT="${BOOKI_PORT:-8080}"
+NEURO_PORT="${NEURO_PORT:-8080}"
 
 HEALTH_PATHS="${HEALTH_PATHS:-/health /healthz /ready /readyz /v1/health}"
 
@@ -89,8 +89,8 @@ echo "Context: ${KUBE_CONTEXT:-current}"
 if [[ -z "$NEURO_SERVICE" ]]; then
   NEURO_SERVICE="$(find_service "$NEURO_NAMESPACE" neuroplastiq neuroplastiq-api || true)"
 fi
-if [[ -z "$BOOKI_SERVICE" ]]; then
-  BOOKI_SERVICE="$(find_service "$BOOKI_NAMESPACE" booki-platform booki-platform-api bookibet-platform-api bookibet-api || true)"
+if [[ -z "$NEURO_SERVICE" ]]; then
+  NEURO_SERVICE="$(find_service "$NEURO_NAMESPACE" neuro-platform neuro-platform-api demo-neuroplastiq-kafka-api neuro-api || true)"
 fi
 
 if [[ -z "$NEURO_SERVICE" ]]; then
@@ -98,23 +98,23 @@ if [[ -z "$NEURO_SERVICE" ]]; then
   kubectl "${KUBECTL_ARGS[@]}" -n "$NEURO_NAMESPACE" get svc || true
   exit 1
 fi
-if [[ -z "$BOOKI_SERVICE" ]]; then
-  echo "❌ Could not resolve Booki service. Set BOOKI_SERVICE=<name>."
-  kubectl "${KUBECTL_ARGS[@]}" -n "$BOOKI_NAMESPACE" get svc || true
+if [[ -z "$NEURO_SERVICE" ]]; then
+  echo "❌ Could not resolve Neuro service. Set NEURO_SERVICE=<name>."
+  kubectl "${KUBECTL_ARGS[@]}" -n "$NEURO_NAMESPACE" get svc || true
   exit 1
 fi
 
 echo "Neuro target: ${NEURO_NAMESPACE}/${NEURO_SERVICE}:${NEURO_PORT}"
-echo "Booki target: ${BOOKI_NAMESPACE}/${BOOKI_SERVICE}:${BOOKI_PORT}"
+echo "Neuro target: ${NEURO_NAMESPACE}/${NEURO_SERVICE}:${NEURO_PORT}"
 echo "Confluent namespace: ${CONFLUENT_NAMESPACE}"
 
 check_service_endpoints "$NEURO_NAMESPACE" "$NEURO_SERVICE"
 check_http_health "$NEURO_NAMESPACE" "$NEURO_SERVICE" "$NEURO_PORT"
 
-check_service_endpoints "$BOOKI_NAMESPACE" "$BOOKI_SERVICE"
-check_http_health "$BOOKI_NAMESPACE" "$BOOKI_SERVICE" "$BOOKI_PORT"
+check_service_endpoints "$NEURO_NAMESPACE" "$NEURO_SERVICE"
+check_http_health "$NEURO_NAMESPACE" "$NEURO_SERVICE" "$NEURO_PORT"
 
 infra/platform/scripts/smoke-kafka-health.sh "$CONFLUENT_NAMESPACE"
 CONNECT_NAMESPACE="$CONFLUENT_NAMESPACE" infra/platform/scripts/check-snowflake-connector-status.sh
 
-echo "✅ All gates passed: neuro + booki + confluent/connectors"
+echo "✅ All gates passed: neuro + neuro + confluent/connectors"

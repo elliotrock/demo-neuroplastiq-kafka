@@ -1,4 +1,4 @@
-STACK=eksctl-bookibet-dev-nodegroup-ng-spot
+STACK=eksctl-neuro-dev-nodegroup-ng-spot
 REGION=ap-southeast-2
 
 # Get the role name created by the nodegroup stack

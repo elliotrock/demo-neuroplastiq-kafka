@@ -1,6 +1,6 @@
 ---
 global:
-  name: bookibet-staging
+  name: neuro-staging
   replicas: 1
   storageClass: gp3-ebs
 

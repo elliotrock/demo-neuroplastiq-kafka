@@ -1,6 +1,6 @@
 ---
 global:
-  name: bookibet-dev
+  name: neuro-dev
   replicas: 1
   storageClass: gp2-ebs
 

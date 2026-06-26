@@ -9,7 +9,7 @@ kraftController:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: workload.bookibet.io/pool
+                - key: workload.neuro.io/pool
                   operator: In
                   values:
                     - confluent
@@ -36,7 +36,7 @@ kafka:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: workload.bookibet.io/pool
+                - key: workload.neuro.io/pool
                   operator: In
                   values:
                     - confluent
@@ -78,7 +78,7 @@ connect:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: workload.bookibet.io/pool
+                - key: workload.neuro.io/pool
                   operator: In
                   values:
                     - confluent
@@ -102,7 +102,7 @@ schemaRegistry:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: workload.bookibet.io/pool
+                - key: workload.neuro.io/pool
                   operator: In
                   values:
                     - confluent
@@ -128,7 +128,7 @@ kafkaRestProxy:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
-                - key: workload.bookibet.io/pool
+                - key: workload.neuro.io/pool
                   operator: In
                   values:
                     - confluent

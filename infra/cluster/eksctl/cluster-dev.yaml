@@ -3,7 +3,7 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-  name: bookibet-dev
+  name: neuro-dev
   region: ap-southeast-2
   version: "1.29"
 
@@ -67,4 +67,4 @@ addons:
     version: v1.53.0-eksbuild.1
     attachPolicyARNs:
       - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
-    serviceAccountRoleARN: arn:aws:iam::838869291259:role/AmazonEKS_EBS_CSI_DriverRole-bookibet-dev
+    serviceAccountRoleARN: arn:aws:iam::755267562381:role/AmazonEKS_EBS_CSI_DriverRole-neuro-dev

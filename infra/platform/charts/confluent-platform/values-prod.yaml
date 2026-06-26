@@ -1,6 +1,6 @@
 ---
 global:
-  name: bookibet-prod
+  name: neuro-prod
   replicas: 3
   storageClass: gp3-ebs
 

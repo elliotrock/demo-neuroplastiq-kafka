@@ -1,7 +1,7 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Bookibet bootstrap infrastructure
+  Neuro bootstrap infrastructure
   Creates VPC, subnets, NAT, S3 buckets, KMS, CloudTrail for an environment.
 
 Parameters:
@@ -32,7 +32,7 @@ Parameters:
     Description: Whether to create VPC endpoints for STS/ECR/S3 to support private EKS nodes
   S3BucketPrefix:
     Type: String
-    Default: bookibet
+    Default: neuro
     Description: Prefix for S3 bucket names (will append account & region for uniqueness)
 
 Mappings:
@@ -386,10 +386,10 @@ Resources:
   # ------------------------------------------------------------------
   # EKS IAM roles (cluster + nodegroup + optional pod execution)
   # ------------------------------------------------------------------
-  BookibetEKSClusterRole:
+  NeuroEKSClusterRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "BookibetEKSClusterRole-${EnvironmentName}"
+      RoleName: !Sub "NeuroEKSClusterRole-${EnvironmentName}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -403,14 +403,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
       Tags:
         - Key: Project
-          Value: Bookibet
+          Value: Neuro
         - Key: RoleType
           Value: Cluster
 
-  BookibetNodegroupRole:
+  NeuroNodegroupRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "BookibetNodegroupRole-${EnvironmentName}"
+      RoleName: !Sub "NeuroNodegroupRole-${EnvironmentName}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -426,14 +426,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Tags:
         - Key: Project
-          Value: Bookibet
+          Value: Neuro
         - Key: RoleType
           Value: Nodegroup
 
-  BookibetEKSPodExecutionRole:
+  NeuroEKSPodExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "BookibetEKSPodExecutionRole-${EnvironmentName}"
+      RoleName: !Sub "NeuroEKSPodExecutionRole-${EnvironmentName}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -446,7 +446,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
       Tags:
         - Key: Project
-          Value: Bookibet
+          Value: Neuro
         - Key: RoleType
           Value: PodExecution
 
@@ -492,11 +492,11 @@ Outputs:
     Description: CloudTrail S3 bucket name
     Value: "disabled"
   EKSClusterRoleArn:
-    Description: ARN for Bookibet EKS Cluster Role
-    Value: !GetAtt BookibetEKSClusterRole.Arn
+    Description: ARN for Neuro EKS Cluster Role
+    Value: !GetAtt NeuroEKSClusterRole.Arn
   EKSNodegroupRoleArn:
-    Description: ARN for Bookibet Nodegroup Role
-    Value: !GetAtt BookibetNodegroupRole.Arn
+    Description: ARN for Neuro Nodegroup Role
+    Value: !GetAtt NeuroNodegroupRole.Arn
   EKSPodExecutionRoleArn:
-    Description: ARN for Bookibet Pod Execution Role (Fargate/addons)
-    Value: !GetAtt BookibetEKSPodExecutionRole.Arn
+    Description: ARN for Neuro Pod Execution Role (Fargate/addons)
+    Value: !GetAtt NeuroEKSPodExecutionRole.Arn

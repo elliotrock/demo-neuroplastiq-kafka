@@ -2,7 +2,7 @@
 set -e
 
 echo "=============================================="
-echo " 🔧 Installing Bookibet / Confluent prerequisites"
+echo " 🔧 Installing Neuro / Confluent prerequisites"
 echo "=============================================="
 
 OS=$(uname -s)

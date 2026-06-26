@@ -95,7 +95,7 @@ lint:
 deploy-dev:
 	aws cloudformation deploy \
 		--template-file infra/cloudformation/main.yml \
-		--stack-name bookibet-dev-bootstrap \
+		--stack-name neuro-dev-bootstrap \
 		--capabilities CAPABILITY_NAMED_IAM
 
 
@@ -203,7 +203,7 @@ You can store in infra/iam/github-oidc-policy.json:
     },
     "StringLike": {
       "token.actions.githubusercontent.com:sub": [
-        "repo:The-Booki-Group/bookibet-platform:*"
+        "repo:elliotrock/demo-neuroplastiq-kafka:*"
       ]
     }
   }
@@ -277,7 +277,7 @@ infra/
 scripts/
 Makefile
 
-2. Full IAM Guard policy set (for Bookibet security baseline)
+2. Full IAM Guard policy set (for Neuro security baseline)
 3. A bash script to bootstrap your entire dev machine:
 
 Install cfn-lint

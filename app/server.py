@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 from core.control_plane import ControlPlaneExecutor
 
-app = FastAPI(title="Bookibet Control Plane")
+app = FastAPI(title="Neuro Control Plane")
 executor = ControlPlaneExecutor()
 
 

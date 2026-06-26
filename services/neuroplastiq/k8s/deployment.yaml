@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: neuroplastiq
-          image: 838869291259.dkr.ecr.ap-southeast-2.amazonaws.com/bookibet-staging-neuroplastiq:staging-c7a79f5m
+          image: 755267562381.dkr.ecr.ap-southeast-2.amazonaws.com/neuro-staging-neuroplastiq:staging-c7a79f5m
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

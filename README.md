@@ -2,7 +2,7 @@
 
 `demo-neuroplastiq-kafka` is a demo repository for proving a Kafka-backed Neuroplastiq deployment pattern. It is intentionally separate from `neuroplastiq-infra` so demo-specific configuration, sample data, shortcuts, and reset scripts do not leak into the reusable SaaS infrastructure repo.
 
-This repo was seeded from the previous Bookibet platform infrastructure tree. Phase 1 is focused on ownership cleanup: keeping the Kafka/Confluent deployment assets that are useful for a demo, removing generated/local material, and clearly marking copied production-oriented assets before they are either simplified or deleted.
+This repo was seeded from the previous Neuro platform infrastructure tree. Phase 1 is focused on ownership cleanup: keeping the Kafka/Confluent deployment assets that are useful for a demo, removing generated/local material, and clearly marking copied production-oriented assets before they are either simplified or deleted.
 
 ## Demo Goals
 
@@ -16,7 +16,7 @@ This repo was seeded from the previous Bookibet platform infrastructure tree. Ph
 
 - This is not the production SaaS infrastructure repo.
 - This repo should not own reusable product source code.
-- This repo should not carry Bookibet-specific tenant configuration.
+- This repo should not carry Neuro-specific tenant configuration.
 - This repo should not define staging or production environments for Neuroplastiq SaaS.
 - This repo should not publish connector images; that belongs in `neuroplastiq-connectors`.
 

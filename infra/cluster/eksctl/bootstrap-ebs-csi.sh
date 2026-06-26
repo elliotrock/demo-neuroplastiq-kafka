@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Allow overriding via env; default to dev cluster/region.
-CLUSTER_NAME="${CLUSTER_NAME:-bookibet-dev}"
+CLUSTER_NAME="${CLUSTER_NAME:-neuro-dev}"
 REGION="${AWS_REGION:-${REGION:-ap-southeast-2}}"
 ROLE_NAME="AmazonEKS_EBS_CSI_DriverRole-${CLUSTER_NAME}"
 ADDON_NAME="aws-ebs-csi-driver"

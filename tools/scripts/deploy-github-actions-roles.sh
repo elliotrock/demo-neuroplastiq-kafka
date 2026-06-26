@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STACK_NAME="${STACK_NAME:-bookibet-github-actions-roles}"
+STACK_NAME="${STACK_NAME:-neuro-github-actions-roles}"
 REGION="${AWS_REGION:-ap-southeast-2}"
 OIDC_PROVIDER_ARN="${OIDC_PROVIDER_ARN:-}"
 CREATE_DEV_ROLE="${CREATE_DEV_ROLE:-false}"

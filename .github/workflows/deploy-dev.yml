@@ -7,7 +7,7 @@ name: Deploy Dev
     branches: [dev]
 
 env:
-  CLUSTER_NAME: bookibet-dev
+  CLUSTER_NAME: neuro-dev
   AWS_REGION: ap-southeast-2
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-dev-network \
+            --stack-name neuro-dev-network \
             --template-file infra/cloudformation/main.yml \
             --parameter-overrides EnvironmentName=dev EnableNat=true EnableVpcEndpoints=true \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -43,9 +43,9 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-dev-api-gateway \
+            --stack-name neuro-dev-api-gateway \
             --template-file infra/cloudformation/api-gateway.yml \
-            --parameter-overrides EnvironmentName=dev ApiNamePrefix=bookibet \
+            --parameter-overrides EnvironmentName=dev ApiNamePrefix=neuro \
             --capabilities CAPABILITY_NAMED_IAM \
             --region "$AWS_REGION"
 
@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           CONNECTOR_BUCKET="$(aws cloudformation describe-stacks \
-            --stack-name bookibet-dev-network \
+            --stack-name neuro-dev-network \
             --region "$AWS_REGION" \
             --query "Stacks[0].Outputs[?OutputKey=='ConnectorBucketName'].OutputValue" \
             --output text)"

@@ -3,7 +3,7 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-  name: bookibet-staging
+  name: neuro-staging
   region: ap-southeast-2
   version: "1.29"
 
@@ -69,7 +69,7 @@ managedNodeGroups:
     availabilityZones:
       - ap-southeast-2a
     labels:
-      workload.bookibet.io/pool: confluent
+      workload.neuro.io/pool: confluent
     taints:
       - key: dedicated
         value: confluent
@@ -92,7 +92,7 @@ managedNodeGroups:
     availabilityZones:
       - ap-southeast-2b
     labels:
-      workload.bookibet.io/pool: confluent
+      workload.neuro.io/pool: confluent
     taints:
       - key: dedicated
         value: confluent

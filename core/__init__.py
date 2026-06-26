@@ -1,1 +1,1 @@
-"""Core application modules for bookibet-platform."""
+"""Core application modules for demo-neuroplastiq-kafka."""

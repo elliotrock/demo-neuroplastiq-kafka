@@ -66,6 +66,20 @@ Purpose:
 
 Use the existing staging value for the first demo deployment pass.
 
+Expected format:
+
+```text
+arn:aws:iam::<account-id>:role/<role-name>
+```
+
+Do not set this to only the role name. `aws-actions/configure-aws-credentials` will fail with:
+
+```text
+Source Account ID is needed if the Role Name is provided and not the Role Arn.
+```
+
+For the current copied staging setup, this should be the full ARN for the existing GitHub Actions staging deploy role.
+
 ## Existing Values Not Currently Used by the Active Workflow
 
 ### `BEDROCK_API_KEY`
@@ -89,7 +103,7 @@ Status: present in GitHub environment, but not currently used by the active work
 The retained workflow currently hard-codes:
 
 ```text
-CLUSTER_NAME=bookibet-staging
+CLUSTER_NAME=neuro-staging
 ```
 
 Do not change this for the first pass if the goal is to preserve the known-working staging deployment mechanics. Later, this should be converted to a GitHub Environment variable and renamed for the demo cluster.
@@ -124,7 +138,7 @@ The active workflow currently hard-codes these non-secret values:
 
 ```text
 AWS_REGION=ap-southeast-2
-CLUSTER_NAME=bookibet-staging
+CLUSTER_NAME=neuro-staging
 STAGING_NODEGROUP_NAME=ng-medium
 STAGING_NODEGROUP_MIN_SIZE=4
 STAGING_NODEGROUP_DESIRED_SIZE=4
@@ -136,10 +150,10 @@ STAGING_CONFLUENT_NODEGROUP_SIZE=2
 It also still references these staging resource names:
 
 ```text
-bookibet-staging-network
-bookibet-staging-api-gateway
+neuro-staging-network
+neuro-staging-api-gateway
 EnvironmentName=staging
-ApiNamePrefix=bookibet
+ApiNamePrefix=neuro
 ```
 
 These are intentionally left unchanged for now to reduce deployment risk.

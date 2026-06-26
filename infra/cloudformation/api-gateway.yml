@@ -1,7 +1,7 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Bookibet API Gateway (minimum public entrypoint)
+  Neuro API Gateway (minimum public entrypoint)
   Creates a REST API with a mock /health route.
 
 Parameters:
@@ -11,7 +11,7 @@ Parameters:
     Description: Short environment name (dev/staging/prod)
   ApiNamePrefix:
     Type: String
-    Default: bookibet
+    Default: neuro
     Description: Prefix for API Gateway name
 
 Resources:

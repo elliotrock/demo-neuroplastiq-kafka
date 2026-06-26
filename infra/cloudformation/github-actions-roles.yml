@@ -1,14 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: GitHub Actions deploy roles for bookibet-platform (dev/staging/prod).
+Description: GitHub Actions deploy roles for demo-neuroplastiq-kafka (dev/staging/prod).
 
 Parameters:
   RepoOwner:
     Type: String
-    Default: The-Booki-Group
+    Default: elliotrock
     Description: GitHub org or user that owns the repo.
   RepoName:
     Type: String
-    Default: bookibet-platform
+    Default: demo-neuroplastiq-kafka
     Description: GitHub repository name.
   OidcProviderArn:
     Type: String
@@ -28,15 +28,15 @@ Parameters:
     Default: 'true'
   DevAllowedSubClaims:
     Type: CommaDelimitedList
-    Default: repo:The-Booki-Group/bookibet-platform:environment:dev,repo:The-Booki-Group/bookibet-platform:ref:refs/heads/dev,repo:The-Booki-Group/bookibet-platform:ref:refs/heads/main
+    Default: repo:elliotrock/demo-neuroplastiq-kafka:environment:dev,repo:elliotrock/demo-neuroplastiq-kafka:ref:refs/heads/dev,repo:elliotrock/demo-neuroplastiq-kafka:ref:refs/heads/main
     Description: Allowed GitHub OIDC subject claims for dev role.
   StagingAllowedSubClaims:
     Type: CommaDelimitedList
-    Default: repo:The-Booki-Group/bookibet-platform:environment:staging
+    Default: repo:elliotrock/demo-neuroplastiq-kafka:environment:staging
     Description: Allowed GitHub OIDC subject claims for staging role.
   ProdAllowedSubClaims:
     Type: CommaDelimitedList
-    Default: repo:The-Booki-Group/bookibet-platform:environment:prod
+    Default: repo:elliotrock/demo-neuroplastiq-kafka:environment:prod
     Description: Allowed GitHub OIDC subject claims for prod role.
 
 Conditions:
@@ -69,7 +69,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
       Policies:
-        - PolicyName: Bookibet-Dev-EKS-DeployPolicy
+        - PolicyName: neuro-Dev-EKS-DeployPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -80,7 +80,7 @@ Resources:
                   - ec2:DescribeLaunchTemplateVersions
                   - ec2:GetLaunchTemplateData
                   - ec2:RunInstances
-                Resource: arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                Resource: arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
               - Sid: ManageNodegroupASG
                 Effect: Allow
                 Action:
@@ -110,8 +110,8 @@ Resources:
                   - eks:ListAccessEntries
                   - eks:ListAssociatedAccessPolicies
                 Resource:
-                  - arn:aws:eks:ap-southeast-2:*:cluster/bookibet-dev
-                  - arn:aws:eks:ap-southeast-2:*:access-entry/bookibet-dev/*
+                  - arn:aws:eks:ap-southeast-2:*:cluster/neuro-dev
+                  - arn:aws:eks:ap-southeast-2:*:access-entry/neuro-dev/*
               - Sid: InstanceProfileManagementEksctl
                 Effect: Allow
                 Action:
@@ -123,7 +123,7 @@ Resources:
                   - iam:TagInstanceProfile
                   - iam:UntagInstanceProfile
                   - iam:ListInstanceProfilesForRole
-                Resource: arn:aws:iam::*:instance-profile/eksctl-bookibet-dev-nodegroup-*
+                Resource: arn:aws:iam::*:instance-profile/eksctl-neuro-dev-nodegroup-*
               - Sid: PassRoleEksctl
                 Effect: Allow
                 Action: iam:PassRole
@@ -292,7 +292,7 @@ Resources:
                 Effect: Allow
                 Action: ec2:RunInstances
                 Resource:
-                  - arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                  - arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
                   - arn:aws:ec2:ap-southeast-2:*:instance/*
                   - arn:aws:ec2:ap-southeast-2:*:image/*
                   - arn:aws:ec2:ap-southeast-2:*:security-group/*
@@ -333,7 +333,7 @@ Resources:
                   - iam:CreateServiceLinkedRole
                   - iam:ListAttachedRolePolicies
                 Resource:
-                  - arn:aws:iam::*:role/Bookibet*
+                  - arn:aws:iam::*:role/Neuro*
                   - arn:aws:iam::*:role/cfk-*
                   - arn:aws:iam::*:role/kafka-*
                   - arn:aws:iam::*:role/connect-*
@@ -361,13 +361,13 @@ Resources:
               - Sid: PassRoleRestrictedToEKS
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: arn:aws:iam::*:role/Bookibet*
+                Resource: arn:aws:iam::*:role/Neuro*
                 Condition:
                   StringEquals:
                     iam:PassedToService:
                       - eks.amazonaws.com
                       - ec2.amazonaws.com
-        - PolicyName: bookibet-apigateway
+        - PolicyName: neuro-apigateway
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -382,7 +382,7 @@ Resources:
                   - apigateway:TagResource
                   - apigateway:UntagResource
                 Resource: '*'
-        - PolicyName: bookibet-ebs-csi
+        - PolicyName: neuro-ebs-csi
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -440,7 +440,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
       Policies:
-        - PolicyName: Bookibet-Staging-EKS-DeployPolicy
+        - PolicyName: neuro-Staging-EKS-DeployPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -451,7 +451,7 @@ Resources:
                   - ec2:DescribeLaunchTemplateVersions
                   - ec2:GetLaunchTemplateData
                   - ec2:RunInstances
-                Resource: arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                Resource: arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
               - Sid: ManageNodegroupASG
                 Effect: Allow
                 Action:
@@ -481,8 +481,8 @@ Resources:
                   - eks:ListAccessEntries
                   - eks:ListAssociatedAccessPolicies
                 Resource:
-                  - arn:aws:eks:ap-southeast-2:*:cluster/bookibet-staging
-                  - arn:aws:eks:ap-southeast-2:*:access-entry/bookibet-staging/*
+                  - arn:aws:eks:ap-southeast-2:*:cluster/neuro-staging
+                  - arn:aws:eks:ap-southeast-2:*:access-entry/neuro-staging/*
               - Sid: InstanceProfileManagementEksctl
                 Effect: Allow
                 Action:
@@ -494,7 +494,7 @@ Resources:
                   - iam:TagInstanceProfile
                   - iam:UntagInstanceProfile
                   - iam:ListInstanceProfilesForRole
-                Resource: arn:aws:iam::*:instance-profile/eksctl-bookibet-staging-nodegroup-*
+                Resource: arn:aws:iam::*:instance-profile/eksctl-neuro-staging-nodegroup-*
               - Sid: PassRoleEksctl
                 Effect: Allow
                 Action: iam:PassRole
@@ -648,7 +648,7 @@ Resources:
                 Effect: Allow
                 Action: ec2:RunInstances
                 Resource:
-                  - arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                  - arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
                   - arn:aws:ec2:ap-southeast-2:*:instance/*
                   - arn:aws:ec2:ap-southeast-2:*:image/*
                   - arn:aws:ec2:ap-southeast-2:*:security-group/*
@@ -689,7 +689,7 @@ Resources:
                   - iam:CreateServiceLinkedRole
                   - iam:ListAttachedRolePolicies
                 Resource:
-                  - arn:aws:iam::*:role/Bookibet*
+                  - arn:aws:iam::*:role/Neuro*
                   - arn:aws:iam::*:role/cfk-*
                   - arn:aws:iam::*:role/kafka-*
                   - arn:aws:iam::*:role/connect-*
@@ -717,13 +717,13 @@ Resources:
               - Sid: PassRoleRestrictedToEKS
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: arn:aws:iam::*:role/Bookibet*
+                Resource: arn:aws:iam::*:role/Neuro*
                 Condition:
                   StringEquals:
                     iam:PassedToService:
                       - eks.amazonaws.com
                       - ec2.amazonaws.com
-        - PolicyName: bookibet-apigateway
+        - PolicyName: neuro-apigateway
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -738,7 +738,7 @@ Resources:
                   - apigateway:TagResource
                   - apigateway:UntagResource
                 Resource: '*'
-        - PolicyName: bookibet-ebs-csi
+        - PolicyName: neuro-ebs-csi
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -796,7 +796,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
       Policies:
-        - PolicyName: Bookibet-Prod-EKS-DeployPolicy
+        - PolicyName: neuro-Prod-EKS-DeployPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -807,7 +807,7 @@ Resources:
                   - ec2:DescribeLaunchTemplateVersions
                   - ec2:GetLaunchTemplateData
                   - ec2:RunInstances
-                Resource: arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                Resource: arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
               - Sid: ManageNodegroupASG
                 Effect: Allow
                 Action:
@@ -837,8 +837,8 @@ Resources:
                   - eks:ListAccessEntries
                   - eks:ListAssociatedAccessPolicies
                 Resource:
-                  - arn:aws:eks:ap-southeast-2:*:cluster/bookibet-prod
-                  - arn:aws:eks:ap-southeast-2:*:access-entry/bookibet-prod/*
+                  - arn:aws:eks:ap-southeast-2:*:cluster/neuro-prod
+                  - arn:aws:eks:ap-southeast-2:*:access-entry/neuro-prod/*
               - Sid: InstanceProfileManagementEksctl
                 Effect: Allow
                 Action:
@@ -850,7 +850,7 @@ Resources:
                   - iam:TagInstanceProfile
                   - iam:UntagInstanceProfile
                   - iam:ListInstanceProfilesForRole
-                Resource: arn:aws:iam::*:instance-profile/eksctl-bookibet-prod-nodegroup-*
+                Resource: arn:aws:iam::*:instance-profile/eksctl-neuro-prod-nodegroup-*
               - Sid: PassRoleEksctl
                 Effect: Allow
                 Action: iam:PassRole
@@ -997,7 +997,7 @@ Resources:
                 Effect: Allow
                 Action: ec2:RunInstances
                 Resource:
-                  - arn:aws:ec2:ap-southeast-2:838869291259:launch-template/*
+                  - arn:aws:ec2:ap-southeast-2:755267562381:launch-template/*
                   - arn:aws:ec2:ap-southeast-2:*:instance/*
                   - arn:aws:ec2:ap-southeast-2:*:image/*
                   - arn:aws:ec2:ap-southeast-2:*:security-group/*
@@ -1038,7 +1038,7 @@ Resources:
                   - iam:CreateServiceLinkedRole
                   - iam:ListAttachedRolePolicies
                 Resource:
-                  - arn:aws:iam::*:role/Bookibet*
+                  - arn:aws:iam::*:role/Neuro*
                   - arn:aws:iam::*:role/cfk-*
                   - arn:aws:iam::*:role/kafka-*
                   - arn:aws:iam::*:role/connect-*
@@ -1066,13 +1066,13 @@ Resources:
               - Sid: PassRoleRestrictedToEKS
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: arn:aws:iam::*:role/Bookibet*
+                Resource: arn:aws:iam::*:role/Neuro*
                 Condition:
                   StringEquals:
                     iam:PassedToService:
                       - eks.amazonaws.com
                       - ec2.amazonaws.com
-        - PolicyName: bookibet-apigateway
+        - PolicyName: neuro-apigateway
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -1087,7 +1087,7 @@ Resources:
                   - apigateway:TagResource
                   - apigateway:UntagResource
                 Resource: '*'
-        - PolicyName: bookibet-ebs-csi
+        - PolicyName: neuro-ebs-csi
           PolicyDocument:
             Version: '2012-10-17'
             Statement:

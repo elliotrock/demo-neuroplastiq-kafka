@@ -7,7 +7,7 @@ Parameters:
     Default: staging
   VpcId:
     Type: String
-    Description: VPC id for the Bookibet environment
+    Description: VPC id for the Neuro environment
   PrivateSubnetIds:
     Type: CommaDelimitedList
     Description: Private subnet ids (comma separated)
@@ -38,7 +38,7 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub "bookibet-${EnvironmentName}-neuro-registry-sg"
+          Value: !Sub "neuro-${EnvironmentName}-neuro-registry-sg"
 
   NeuroRegistryDbSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -47,12 +47,12 @@ Resources:
       SubnetIds: !Ref PrivateSubnetIds
       Tags:
         - Key: Name
-          Value: !Sub "bookibet-${EnvironmentName}-neuro-registry-subnets"
+          Value: !Sub "neuro-${EnvironmentName}-neuro-registry-subnets"
 
   NeuroRegistryDb:
     Type: AWS::RDS::DBInstance
     Properties:
-      DBInstanceIdentifier: !Sub "bookibet-${EnvironmentName}-neuro-registry"
+      DBInstanceIdentifier: !Sub "neuro-${EnvironmentName}-neuro-registry"
       Engine: postgres
       DBInstanceClass: db.t4g.micro
       AllocatedStorage: 20

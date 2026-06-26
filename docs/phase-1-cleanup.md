@@ -4,11 +4,11 @@ Date: 2026-06-22
 
 ## Purpose
 
-Phase 1 converts the copied infra tree into a clearly scoped Kafka demo repo. The goal is not to finish the whole refactor in one pass; it is to stop the repo from presenting itself as Bookibet production infrastructure and to separate obvious demo assets from copied production or product-code assets.
+Phase 1 converts the copied infra tree into a clearly scoped Kafka demo repo. The goal is not to finish the whole refactor in one pass; it is to stop the repo from presenting itself as Neuro production infrastructure and to separate obvious demo assets from copied production or product-code assets.
 
 ## Completed in this pass
 
-- Replaced the copied Bookibet README with a demo-specific README.
+- Replaced the copied Neuro README with a demo-specific README.
 - Added this cleanup log under `docs/`.
 - Hardened `.gitignore` for Python, Node, Terraform, Helm dependency archives, local secrets, generated files, and Windows metadata sidecars.
 - Kept the copied staging deployment workflow as the demo deployment path and changed its push trigger from `staging` to `main` to preserve the known-working deployment mechanics under time constraints.

@@ -9,7 +9,7 @@ name: Deploy Prod
 
 env:
   AWS_REGION: ap-southeast-2
-  CLUSTER_NAME: bookibet-prod
+  CLUSTER_NAME: neuro-prod
   PROD_NODEGROUP_NAME: ng-spot
   PROD_NODEGROUP_MIN_SIZE: "3"
   PROD_NODEGROUP_DESIRED_SIZE: "3"
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: prod
-      url: https://platform.booki/
+      url: https://platform.neuro/
     permissions:
       id-token: write
       contents: read
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-prod-network \
+            --stack-name neuro-prod-network \
             --template-file infra/cloudformation/main.yml \
             --parameter-overrides EnvironmentName=prod EnableNat=true EnableVpcEndpoints=true \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -49,9 +49,9 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-prod-api-gateway \
+            --stack-name neuro-prod-api-gateway \
             --template-file infra/cloudformation/api-gateway.yml \
-            --parameter-overrides EnvironmentName=prod ApiNamePrefix=bookibet \
+            --parameter-overrides EnvironmentName=prod ApiNamePrefix=neuro \
             --capabilities CAPABILITY_NAMED_IAM \
             --region "$AWS_REGION"
 
@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           CONNECTOR_BUCKET="$(aws cloudformation describe-stacks \
-            --stack-name bookibet-prod-network \
+            --stack-name neuro-prod-network \
             --region "$AWS_REGION" \
             --query "Stacks[0].Outputs[?OutputKey=='ConnectorBucketName'].OutputValue" \
             --output text)"
@@ -90,7 +90,7 @@ jobs:
       - name: Prepare eksctl config (use network VPC)
         run: |
           set -euo pipefail
-          STACK_NAME="bookibet-prod-network"
+          STACK_NAME="neuro-prod-network"
           VPC_ID="$(aws cloudformation describe-stacks \
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \

@@ -9,7 +9,7 @@ SHELL := /bin/bash
   # patch if the lurky RF=1 pops up
 
 
-# bookibet-dev-connectors-838869291259-ap-southeast-2
+# neuro-dev-connectors-755267562381-ap-southeast-2
 
 # examples;
 # eval "$(make auth)"
@@ -29,7 +29,7 @@ auth:
 	export AWS_SECRET_ACCESS_KEY="$$secret"; \
 	export AWS_REGION=ap-southeast-2; \
 	unset AWS_SESSION_TOKEN; \
-	CREDS=$$(aws sts assume-role --role-arn arn:aws:iam::838869291259:role/cli-admin --role-session-name local-cli); \
+	CREDS=$$(aws sts assume-role --role-arn arn:aws:iam::755267562381:role/cli-admin --role-session-name local-cli); \
 	AWS_ACCESS_KEY_ID=$$(echo "$$CREDS" | jq -r .Credentials.AccessKeyId); \
 	AWS_SECRET_ACCESS_KEY=$$(echo "$$CREDS" | jq -r .Credentials.SecretAccessKey); \
 	AWS_SESSION_TOKEN=$$(echo "$$CREDS" | jq -r .Credentials.SessionToken); \
@@ -37,7 +37,7 @@ auth:
 		"$$AWS_ACCESS_KEY_ID" "$$AWS_SECRET_ACCESS_KEY" "$$AWS_SESSION_TOKEN"
 
 # Grants the cli-admin role cluster admin via EKS Access Entries for the target cluster.
-# Example (staging): EKS_CLUSTER_NAME=bookibet-staging EKS_ROLE_ARN=arn:aws:iam::838869291259:role/cli-admin make eks-access-admin
+# Example (staging): EKS_CLUSTER_NAME=neuro-staging EKS_ROLE_ARN=arn:aws:iam::755267562381:role/cli-admin make eks-access-admin
 .PHONY: eks-access-admin
 eks-access-admin:
 	@if [[ -z "$$EKS_CLUSTER_NAME" || -z "$$EKS_ROLE_ARN" ]]; then \
@@ -55,11 +55,11 @@ eks-access-admin:
 		--access-scope type=cluster
 
 # Refresh kubeconfig token for an EKS cluster. Run: eval "$(make auth)" first.
-# Example (staging): EKS_CLUSTER_NAME=bookibet-staging EKS_ROLE_ARN=arn:aws:iam::838869291259:role/cli-admin AWS_REGION=ap-southeast-2 make kubeconfig-refresh
+# Example (staging): EKS_CLUSTER_NAME=neuro-staging EKS_ROLE_ARN=arn:aws:iam::755267562381:role/cli-admin AWS_REGION=ap-southeast-2 make kubeconfig-refresh
 # or eval "$(make auth)"
-# aws eks update-kubeconfig --region ap-southeast-2 --name bookibet-staging
+# aws eks update-kubeconfig --region ap-southeast-2 --name neuro-staging
 
-# aws eks update-kubeconfig --region ap-southeast-2 --name bookibet-dev
+# aws eks update-kubeconfig --region ap-southeast-2 --name neuro-dev
 
 .PHONY: kubeconfig-refresh
 kubeconfig-refresh:
@@ -72,7 +72,7 @@ kubeconfig-refresh:
 	aws eks update-kubeconfig --region "$${AWS_REGION:-ap-southeast-2}" --name "$$EKS_CLUSTER_NAME" "$${role_arg[@]}"
 
 # Refresh kubeconfig without assuming a role (use when already authenticated as target IAM user).
-# Example (staging): EKS_CLUSTER_NAME=bookibet-staging AWS_REGION=ap-southeast-2 make kubeconfig-refresh-no-role
+# Example (staging): EKS_CLUSTER_NAME=neuro-staging AWS_REGION=ap-southeast-2 make kubeconfig-refresh-no-role
 .PHONY: kubeconfig-refresh-no-role
 kubeconfig-refresh-no-role:
 	@if [[ -z "$$EKS_CLUSTER_NAME" ]]; then \
@@ -88,16 +88,16 @@ kubeconfig-refresh-no-role:
 # - All connectors: make connector-upload ENVIRONMENT=staging CONNECTOR=--all
 # - One connector:  make connector-upload ENVIRONMENT=staging CONNECTOR=snowflake
 # Optional vars:
-# - CONNECTOR_BUCKET (default: bookibet-<env>-connectors-<account>-<region>)
+# - CONNECTOR_BUCKET (default: neuro-<env>-connectors-<account>-<region>)
 # - AWS_REGION (default: ap-southeast-2)
-# - AWS_ACCOUNT_ID (default: 838869291259)
+# - AWS_ACCOUNT_ID (default: 755267562381)
 # - CONNECTOR_S3_PREFIX (default: connectors)
 connector-upload:
 	@ENVIRONMENT="$${ENVIRONMENT:-staging}"; \
 	AWS_REGION="$${AWS_REGION:-ap-southeast-2}"; \
-	AWS_ACCOUNT_ID="$${AWS_ACCOUNT_ID:-838869291259}"; \
+	AWS_ACCOUNT_ID="$${AWS_ACCOUNT_ID:-755267562381}"; \
 	CONNECTOR="$${CONNECTOR:---all}"; \
-	CONNECTOR_BUCKET="$${CONNECTOR_BUCKET:-bookibet-$${ENVIRONMENT}-connectors-$${AWS_ACCOUNT_ID}-$${AWS_REGION}}"; \
+	CONNECTOR_BUCKET="$${CONNECTOR_BUCKET:-neuro-$${ENVIRONMENT}-connectors-$${AWS_ACCOUNT_ID}-$${AWS_REGION}}"; \
 	S3_PREFIX="$${CONNECTOR_S3_PREFIX:-connectors}"; \
 	if [[ "$$ENVIRONMENT" != "staging" ]]; then \
 		echo "Warning: only staging is currently in active use for connector flows (ENVIRONMENT=$$ENVIRONMENT)."; \
@@ -220,9 +220,9 @@ connector-status:
 # - All connectors: make connector-apply-cluster ENVIRONMENT=staging CONNECTOR=--all
 # - One connector:  make connector-apply-cluster ENVIRONMENT=staging CONNECTOR=snowflake
 # Optional vars:
-# - CONNECTOR_BUCKET (default: bookibet-<env>-connectors-<account>-<region>)
+# - CONNECTOR_BUCKET (default: neuro-<env>-connectors-<account>-<region>)
 # - AWS_REGION (default: ap-southeast-2)
-# - AWS_ACCOUNT_ID (default: 838869291259)
+# - AWS_ACCOUNT_ID (default: 755267562381)
 # - CONNECTOR_S3_PREFIX (default: connectors)
 # - CONNECT_NAMESPACE (default: confluent)
 # - CONNECT_RELEASE_NAME (default: confluent-platform)
@@ -232,9 +232,9 @@ connector-status:
 connector-apply-cluster:
 	@ENVIRONMENT="$${ENVIRONMENT:-staging}"; \
 	AWS_REGION="$${AWS_REGION:-ap-southeast-2}"; \
-	AWS_ACCOUNT_ID="$${AWS_ACCOUNT_ID:-838869291259}"; \
+	AWS_ACCOUNT_ID="$${AWS_ACCOUNT_ID:-755267562381}"; \
 	CONNECTOR="$${CONNECTOR:---all}"; \
-	CONNECTOR_BUCKET="$${CONNECTOR_BUCKET:-bookibet-$${ENVIRONMENT}-connectors-$${AWS_ACCOUNT_ID}-$${AWS_REGION}}"; \
+	CONNECTOR_BUCKET="$${CONNECTOR_BUCKET:-neuro-$${ENVIRONMENT}-connectors-$${AWS_ACCOUNT_ID}-$${AWS_REGION}}"; \
 	S3_PREFIX="$${CONNECTOR_S3_PREFIX:-connectors}"; \
 	CONNECT_NAMESPACE="$${CONNECT_NAMESPACE:-confluent}"; \
 	CONNECT_RELEASE_NAME="$${CONNECT_RELEASE_NAME:-confluent-platform}"; \
@@ -273,7 +273,7 @@ connectors-build-apply-prod:
 	CONNECTOR_BUCKET="$$CONNECTOR_BUCKET" AWS_REGION="$$AWS_REGION" \
 	CONNECTOR="$$CONNECTOR" $(MAKE) connector-apply-cluster
 
-# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:838869291259:cluster/bookibet-staging KONG_NAMESPACE=kong make kong-apply
+# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:755267562381:cluster/neuro-staging KONG_NAMESPACE=kong make kong-apply
 .PHONY: kong-apply
 kong-apply:
 	@KONG_NAMESPACE="$${KONG_NAMESPACE:-kong}"; \
@@ -291,7 +291,7 @@ kong-apply:
 	helm repo update; \
 	helm upgrade --install kong kong/kong -n "$$KONG_NAMESPACE" -f "$$KONG_VALUES"
 
-# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:838869291259:cluster/bookibet-staging KONG_NAMESPACE=kong LOCAL_KONG_PORT=18080 make kong-port-forward
+# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:755267562381:cluster/neuro-staging KONG_NAMESPACE=kong LOCAL_KONG_PORT=18080 make kong-port-forward
 .PHONY: kong-port-forward
 kong-port-forward:
 	@KONG_NAMESPACE="$${KONG_NAMESPACE:-kong}"; \
@@ -304,7 +304,7 @@ kong-port-forward:
 	kubectl "$${kubectl_args[@]}" -n "$$KONG_NAMESPACE" port-forward \
 		"svc/$$KONG_PROXY_SERVICE" "$$LOCAL_KONG_PORT:$$KONG_PROXY_PORT"
 
-# Example (staging + clean topic): RESET_TOPIC=1 KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:838869291259:cluster/bookibet-staging NAMESPACE=confluent TOPIC=bm_test make push-test-schema
+# Example (staging + clean topic): RESET_TOPIC=1 KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:755267562381:cluster/neuro-staging NAMESPACE=confluent TOPIC=bm_test make push-test-schema
 .PHONY: push-test-schema
 push-test-schema:
 	
@@ -316,7 +316,7 @@ push-test-schema:
 	KAFKA_REST_PORT="$$KAFKA_REST_PORT" LOCAL_KAFKA_REST_PORT="$$LOCAL_KAFKA_REST_PORT" \
 	RESET_TOPIC="$$RESET_TOPIC" infra/platform/scripts/push-test-schema-and-payload.sh
 
-# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:838869291259:cluster/bookibet-staging NAMESPACE=neuroplastiq APP_LABEL=app=neuroplastiq make k8s-logs
+# Example (staging): KUBE_CONTEXT=arn:aws:eks:ap-southeast-2:755267562381:cluster/neuro-staging NAMESPACE=neuroplastiq APP_LABEL=app=neuroplastiq make k8s-logs
 .PHONY: k8s-logs
 k8s-logs:
 	@NAMESPACE="$${NAMESPACE:-neuroplastiq}"; \
@@ -328,14 +328,14 @@ k8s-logs:
 
 # Single post-restart health gate:
 # - neuroplastiq app health
-# - booki-platform app health
+# - neuro-platform app health
 # - Kafka/Confluent broker health
 # - Snowflake connector plugin + runtime status
 # Example:
 # KUBE_CONTEXT=<eks-context> make post-restart-health
 # Optional overrides:
 # NEURO_NAMESPACE, NEURO_SERVICE, NEURO_PORT
-# BOOKI_NAMESPACE, BOOKI_SERVICE, BOOKI_PORT
+# NEURO_NAMESPACE, NEURO_SERVICE, NEURO_PORT
 # CONFLUENT_NAMESPACE, HEALTH_PATHS, TIMEOUT_SECONDS
 .PHONY: post-restart-health
 post-restart-health:
@@ -343,9 +343,9 @@ post-restart-health:
 	NEURO_NAMESPACE="$${NEURO_NAMESPACE:-neuroplastiq}" \
 	NEURO_SERVICE="$${NEURO_SERVICE:-}" \
 	NEURO_PORT="$${NEURO_PORT:-8000}" \
-	BOOKI_NAMESPACE="$${BOOKI_NAMESPACE:-default}" \
-	BOOKI_SERVICE="$${BOOKI_SERVICE:-}" \
-	BOOKI_PORT="$${BOOKI_PORT:-8080}" \
+	NEURO_NAMESPACE="$${NEURO_NAMESPACE:-default}" \
+	NEURO_SERVICE="$${NEURO_SERVICE:-}" \
+	NEURO_PORT="$${NEURO_PORT:-8080}" \
 	CONFLUENT_NAMESPACE="$${CONFLUENT_NAMESPACE:-confluent}" \
 	HEALTH_PATHS="$${HEALTH_PATHS:-/health /healthz /ready /readyz /v1/health}" \
 	TIMEOUT_SECONDS="$${TIMEOUT_SECONDS:-300}" \
@@ -400,9 +400,9 @@ confluent-verify-offsets:
 
 .PHONY: neuro-summary
 neuro-summary:
-	@echo "Neuro + Bookibet summary (2026-02-09)"; \
+	@echo "Neuro + Neuro summary (2026-02-09)"; \
 	echo "- Kafka topic: betmaker.Bet"; \
-	echo "- Snowflake table target: BOOKIBET_STAGING.RAW.BETMAKER_BET"; \
+	echo "- Snowflake table target: NEURO_STAGING.RAW.BETMAKER_BET"; \
 	echo "- Sink test buffers: count=1 flush=11 bytes=1024"; \
 	echo "- Apply sink config: ./infra/platform/scripts/register-connector.sh confluent/config/connectors/snowflake/snowflake-sink.json"; \
 	echo "- Next steps:"; \

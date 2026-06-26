@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROLE_NAME="${1:-github-actions-deploy-dev}"
-POLICY_NAME="${2:-bookibet-ebs-csi}"
+POLICY_NAME="${2:-neuro-ebs-csi}"
 POLICY_PATH="infra/iam/github-actions-ebs-csi-policy.json"
 
 if [ ! -f "$POLICY_PATH" ]; then

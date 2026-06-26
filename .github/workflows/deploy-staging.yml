@@ -9,7 +9,7 @@ name: Deploy Staging
 
 env:
   AWS_REGION: ap-southeast-2
-  CLUSTER_NAME: bookibet-staging
+  CLUSTER_NAME: neuro-staging
   STAGING_NODEGROUP_NAME: ng-medium
   STAGING_NODEGROUP_MIN_SIZE: "4"
   STAGING_NODEGROUP_DESIRED_SIZE: "4"
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://staging.platform.booki/
+      url: https://staging.platform.neuro/
     permissions:
       id-token: write
       contents: read
@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-staging-network \
+            --stack-name neuro-staging-network \
             --template-file infra/cloudformation/main.yml \
             --parameter-overrides EnvironmentName=staging EnableNat=true EnableVpcEndpoints=true \
             --capabilities CAPABILITY_NAMED_IAM \
@@ -51,16 +51,16 @@ jobs:
         run: |
           set -euo pipefail
           aws cloudformation deploy \
-            --stack-name bookibet-staging-api-gateway \
+            --stack-name neuro-staging-api-gateway \
             --template-file infra/cloudformation/api-gateway.yml \
-            --parameter-overrides EnvironmentName=staging ApiNamePrefix=bookibet \
+            --parameter-overrides EnvironmentName=staging ApiNamePrefix=neuro \
             --capabilities CAPABILITY_NAMED_IAM \
             --region "$AWS_REGION"
 
       - name: Prepare eksctl config (use network VPC)
         run: |
           set -euo pipefail
-          STACK_NAME="bookibet-staging-network"
+          STACK_NAME="neuro-staging-network"
           VPC_ID="$(aws cloudformation describe-stacks \
             --stack-name "$STACK_NAME" \
             --region "$AWS_REGION" \
@@ -470,7 +470,7 @@ jobs:
 
       - name: Gate on dedicated Confluent node readiness
         run: |
-          infra/platform/scripts/wait-node-readiness.sh 4 900 "workload.bookibet.io/pool=confluent"
+          infra/platform/scripts/wait-node-readiness.sh 4 900 "workload.neuro.io/pool=confluent"
 
       - name: Enable EBS CSI Driver
         run: |
@@ -600,11 +600,11 @@ jobs:
 
       - name: Gate on node readiness after Confluent deploy
         run: |
-          infra/platform/scripts/wait-node-readiness.sh 4 900 "workload.bookibet.io/pool=confluent"
+          infra/platform/scripts/wait-node-readiness.sh 4 900 "workload.neuro.io/pool=confluent"
 
       - name: Verify Confluent dedicated placement
         run: |
-          infra/platform/scripts/wait-confluent-dedicated-placement.sh confluent workload.bookibet.io/pool confluent 900
+          infra/platform/scripts/wait-confluent-dedicated-placement.sh confluent workload.neuro.io/pool confluent 900
 
       - name: Verify Kafka storage and broker health
         run: |

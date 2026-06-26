@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROLE_NAME="${1:-github-actions-deploy-dev}"
-POLICY_NAME="${2:-bookibet-apigateway}"
+POLICY_NAME="${2:-neuro-apigateway}"
 POLICY_PATH="infra/iam/github-actions-apigateway-policy.json"
 
 if [ ! -f "$POLICY_PATH" ]; then

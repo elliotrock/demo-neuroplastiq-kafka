@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-CLUSTER_NAME="bookibet-dev"
+CLUSTER_NAME="neuro-dev"
 REGION="ap-southeast-2"
 
 echo "🔧 Checking OIDC provider for cluster: $CLUSTER_NAME"

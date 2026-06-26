@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAMESPACE="${1:-confluent}"
-NODE_LABEL="${2:-workload.bookibet.io/pool}"
+NODE_LABEL="${2:-workload.neuro.io/pool}"
 NODE_LABEL_VALUE="${3:-confluent}"
 TIMEOUT_SECONDS="${4:-900}"
 
